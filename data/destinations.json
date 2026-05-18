@@ -1,0 +1,14 @@
+[
+  {
+    "key": "jaipur",
+    "name": "Jaipur, India",
+    "timezone": "Asia/Kolkata",
+    "summary": "The Pink City of Rajasthan, known for palaces, forts, bazaars, and vibrant culture.",
+    "tips": [
+      "Carry water and sun protection during summer visits.",
+      "Many monuments open around 9 AM; plan mornings for forts.",
+      "Bargaining is common in local bazaars."
+    ],
+    "poiFile": "pois.jaipur.json"
+  }
+]

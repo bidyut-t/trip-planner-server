@@ -1,0 +1,18 @@
+[
+  {
+    "id": "act-1",
+    "name": "Partner Heritage Walk",
+    "city": "Jaipur",
+    "tags": ["history", "walking", "culture"],
+    "durationMinutes": 120,
+    "priority": 8
+  },
+  {
+    "id": "act-2",
+    "name": "Partner Cooking Class",
+    "city": "Jaipur",
+    "tags": ["food", "culture"],
+    "durationMinutes": 150,
+    "priority": 6
+  }
+]

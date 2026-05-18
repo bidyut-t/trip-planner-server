@@ -1,0 +1,10 @@
+[
+  {
+    "id": "game-1",
+    "name": "Partner Fun Arcade",
+    "city": "Jaipur",
+    "tags": ["games", "evening", "family"],
+    "durationMinutes": 90,
+    "priority": 7
+  }
+]

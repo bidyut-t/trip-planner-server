@@ -1,0 +1,18 @@
+[
+  {
+    "id": "rest-1",
+    "name": "Partner Spice House",
+    "city": "Jaipur",
+    "tags": ["lunch", "dinner", "food", "rajasthani"],
+    "durationMinutes": 90,
+    "priority": 10
+  },
+  {
+    "id": "rest-2",
+    "name": "Partner Rooftop Grill",
+    "city": "Jaipur",
+    "tags": ["dinner", "food", "evening"],
+    "durationMinutes": 75,
+    "priority": 7
+  }
+]

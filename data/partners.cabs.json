@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cab-1",
+    "name": "YourCab Co",
+    "city": "Jaipur",
+    "tags": ["airport", "city", "transfer"],
+    "durationMinutes": 45,
+    "priority": 10
+  },
+  {
+    "id": "cab-2",
+    "name": "YourCab Premium",
+    "city": "Jaipur",
+    "tags": ["city", "evening"],
+    "durationMinutes": 30,
+    "priority": 8
+  }
+]

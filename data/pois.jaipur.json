@@ -1,0 +1,32 @@
+[
+  {
+    "id": "poi-1",
+    "name": "Amber Fort",
+    "tags": ["history", "photography", "architecture"],
+    "durationMinutes": 150
+  },
+  {
+    "id": "poi-2",
+    "name": "Hawa Mahal",
+    "tags": ["history", "photography"],
+    "durationMinutes": 60
+  },
+  {
+    "id": "poi-3",
+    "name": "City Palace",
+    "tags": ["history", "culture", "photography"],
+    "durationMinutes": 120
+  },
+  {
+    "id": "poi-4",
+    "name": "Johari Bazaar",
+    "tags": ["shopping", "food", "culture"],
+    "durationMinutes": 90
+  },
+  {
+    "id": "poi-5",
+    "name": "Jantar Mantar",
+    "tags": ["history", "science"],
+    "durationMinutes": 75
+  }
+]
