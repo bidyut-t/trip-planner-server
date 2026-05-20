@@ -13,6 +13,7 @@
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
     "jsonrepair": "^3.14.0",
+    "keyword-extractor": "^0.0.28",
     "zod": "^3.25.76"
   },
   "devDependencies": {

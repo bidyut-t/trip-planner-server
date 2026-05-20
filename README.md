@@ -17,20 +17,20 @@ npm install
 npm run dev
 ```
 
-Server: **http://localhost:3000**
+Server: **http://localhost:8081** (or `PORT` from `.env`)
 
 ## API
 
 ### Health
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:8081/health
 ```
 
-### Plan a trip (mock planner)
+### Plan a trip (structured JSON)
 
 ```bash
-curl -X POST http://localhost:3000/api/trips/plan ^
+curl -X POST http://localhost:8081/api/trips/plan ^
   -H "Content-Type: application/json" ^
   -d "{\"destination\":\"Jaipur, India\",\"startDate\":\"2026-06-10\",\"endDate\":\"2026-06-12\",\"interests\":[\"history\",\"food\",\"photography\"]}"
 ```
@@ -45,13 +45,43 @@ $body = @{
   interests   = @("history", "food", "photography")
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:3000/api/trips/plan" -Method Post -Body $body -ContentType "application/json"
+Invoke-RestMethod -Uri "http://localhost:8081/api/trips/plan" -Method Post -Body $body -ContentType "application/json"
 ```
+
+### Plan a trip (natural language)
+
+Same planning rules as `/plan` (catalog partners, POIs, 14-day max, mock or Cursor planner).
+
+Parsing pipeline:
+
+1. **keyword-extractor** — pulls candidate interest words from the prompt (no hardcoded interest list).
+2. **Cursor AI** — infers destination, dates, trip length, travelers, pace, and final interests from the message (and keyword hints).
+3. **Planner** — builds the itinerary from the structured `request`.
+
+Requires `CURSOR_API_KEY` in `.env` (independent of `USE_CURSOR_SDK` for the itinerary planner).
+
+```bash
+curl -X POST http://localhost:8081/api/trips/plan/natural ^
+  -H "Content-Type: application/json" ^
+  -d "{\"prompt\":\"Plan a relaxed 3-day Jaipur trip for 2 people from 2026-06-10. We love history, food, and photography.\"}"
+```
+
+**PowerShell:**
+
+```powershell
+$body = @{
+  prompt = "Plan a relaxed 3-day Jaipur trip for 2 people from 2026-06-10. We love history, food, and photography."
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8081/api/trips/plan/natural" -Method Post -Body $body -ContentType "application/json"
+```
+
+Response shape: `{ "request": { ... }, "plan": { ... } }` — `request` is the parsed structured input used for planning.
 
 ### View catalog for a destination
 
 ```bash
-curl http://localhost:3000/api/catalog/Jaipur%2C%20India
+curl http://localhost:8081/api/catalog/Jaipur%2C%20India
 ```
 
 ## Request body
@@ -64,6 +94,14 @@ curl http://localhost:3000/api/catalog/Jaipur%2C%20India
 | `interests` | no | e.g. `["history","food"]` |
 | `travelers` | no | default `2` |
 | `pace` | no | `relaxed` \| `moderate` \| `packed` |
+
+### Natural language (`POST /api/trips/plan/natural`)
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `prompt` | yes | Free-text trip description (3–2000 chars) |
+
+Describe the trip in plain language (e.g. “3-day relaxed Jaipur trip for 2, love history and food, starting June 10 2026”). AI resolves dates and traveler count.
 
 ## Mock data
 
@@ -104,5 +142,7 @@ trip-planner-server/
       planner.mock.ts
       planner.cursor.ts
       planner.service.ts
+      nlp-parser.ai.ts
+      nlp-parser.keywords.ts
       catalog.service.ts
 ```

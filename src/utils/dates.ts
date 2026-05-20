@@ -18,6 +18,12 @@ export function eachDay(start: string, end: string): string[] {
   return days;
 }
 
+export function addDays(iso: string, days: number): string {
+  const d = parseDate(iso);
+  d.setUTCDate(d.getUTCDate() + days);
+  return formatDate(d);
+}
+
 export function addMinutes(time: string, minutes: number): string {
   const [h, m] = time.split(":").map(Number);
   const total = h * 60 + m + minutes;

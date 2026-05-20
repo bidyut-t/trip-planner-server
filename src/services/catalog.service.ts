@@ -54,6 +54,10 @@ function matchesCity(item: PartnerItem, city: string): boolean {
   return item.city.toLowerCase() === city.toLowerCase();
 }
 
+export async function loadDestinations(): Promise<DestinationMeta[]> {
+  return readJson<DestinationMeta[]>("destinations.json");
+}
+
 export async function loadCatalog(destination: string): Promise<CatalogBundle> {
   const destinations = await readJson<DestinationMeta[]>("destinations.json");
   const city = normalizeCity(destination);

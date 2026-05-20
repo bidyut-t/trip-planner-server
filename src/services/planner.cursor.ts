@@ -1,6 +1,7 @@
 import type { PlanTripRequest, TripPlan } from "../schemas/trip-plan.schema.js";
 import { tripPlanSchema } from "../schemas/trip-plan.schema.js";
 import { parseLlmJson } from "../utils/llm-json.js";
+import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
 import type { CatalogBundle } from "./catalog.service.js";
 import { planTripMock } from "./planner.mock.js";
 
@@ -14,7 +15,7 @@ Schema:
   "interests": string[],
   "days": [{ "date": "YYYY-MM-DD", "blocks": [{
     "start": "HH:MM", "end": "HH:MM",
-    "type": "cab"|"sightseeing"|"restaurant"|"activity"|"game"|"free"|"travel",
+    "type": "cab"|"sightseeing"|"restaurant"|"activity"|"game"|"free"|"travel" (singular only — never "activities" or "restaurants"),
     "title": string, "partner"?: boolean, "provider"?: string,
     "source"?: "poi"|"partner"|"suggested", "matchedInterest"?: string, "notes"?: string,
     "addFromOurRecommendation": boolean
@@ -56,7 +57,7 @@ export async function planTripCursor(
     const { Agent } = await import("@cursor/sdk");
     const result = await Agent.prompt(buildPrompt(input, catalog), {
       apiKey,
-      model: { id: "composer-2" },
+      model: { id: "gemini-3-flash" },
       local: { cwd: process.cwd() },
     });
 
@@ -65,11 +66,12 @@ export async function planTripCursor(
       throw new Error("Cursor agent returned an empty response");
     }
 
-    const parsed = parseLlmJson(raw);
+    const parsed = normalizeTripPlanFromLlm(parseLlmJson(raw));
     const plan = tripPlanSchema.parse(parsed);
     return { ...plan, plannerMode: "cursor" };
   } catch (err) {
-    console.warn("[planner.cursor] SDK failed, falling back to mock:", err);
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn("[planner.cursor] AI plan invalid or failed, falling back to mock:", detail);
     return planTripMock(input, catalog);
   }
 }
