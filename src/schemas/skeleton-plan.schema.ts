@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizeBlockType } from "../utils/normalize-llm-output.js";
+import { normalizeBlockType, normalizeSource } from "../utils/normalize-llm-output.js";
 
 const skeletonBlockTypeSchema = z.preprocess(
   normalizeBlockType,
@@ -19,9 +19,13 @@ export const skeletonBlockSchema = z.object({
   end: z.string(),
   type: skeletonBlockTypeSchema,
   title: z.string(),
+  partner: z.boolean().optional(),
+  provider: z.string().optional(),
+  source: z.preprocess(normalizeSource, z.enum(["poi", "partner", "suggested"])).optional(),
   notes: z.string().optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  addFromOurRecommendation: z.boolean().optional(),
 });
 
 export const skeletonDaySchema = z.object({

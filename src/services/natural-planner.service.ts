@@ -3,11 +3,13 @@ import { planTripRequestSchema } from "../schemas/trip-plan.schema.js";
 import { naturalPlanDraftSchema } from "../schemas/skeleton-plan.schema.js";
 import { loadCatalog, loadDestinations, type DestinationMeta } from "./catalog.service.js";
 import { extractPromptKeywords } from "./nlp-parser.keywords.js";
-import { enrichSkeletonWithCatalog } from "./planner.catalog-enrich.js";
+import { buildTripPlanFromDraft } from "./planner.from-draft.js";
 import { planTripMock } from "./planner.mock.js";
 import { parseLlmJson } from "../utils/llm-json.js";
 import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
 import { runCursorPrompt } from "../utils/cursor-agent.js";
+import { isCatalogMcpEnabled } from "../utils/env.js";
+import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
 import { buildScheduleRulesBlock } from "./planner.schedule-rules.js";
 
 function buildNaturalPlanPrompt(
@@ -20,7 +22,10 @@ function buildNaturalPlanPrompt(
   const keywordHint =
     suggestedKeywords.length > 0 ? suggestedKeywords.join(", ") : "(none)";
 
-  return `Parse the user message and build a trip schedule skeleton. Reply with JSON only — no markdown.
+  const catalogHint = isCatalogMcpEnabled()
+    ? " Before building the schedule, call trip-catalog MCP tools (e.g. get_catalog_bundle or list_restaurants) for the destination. Use exact partner names from those results in titles; set partner=true and provider to the partner name for cab/restaurant/activity/game blocks."
+    : "";
+  return `Parse the user message and build a complete trip schedule.${catalogHint} Reply with JSON only — no markdown.
 
 Schema:
 {
@@ -36,6 +41,9 @@ Schema:
       "start": "HH:MM", "end": "HH:MM",
       "type": "cab"|"sightseeing"|"restaurant"|"activity"|"game"|"free"|"travel",
       "title": string,
+      "partner"?: boolean,
+      "provider"?: string,
+      "source"?: "poi"|"partner"|"suggested",
       "notes"?: string,
       "latitude"?: number,
       "longitude"?: number
@@ -50,14 +58,14 @@ ${buildScheduleRulesBlock({ includeBlockSchema: true })}
 
 Supported destinations:
 ${destList}
+${isCatalogMcpEnabled() ? buildCatalogMcpPromptBlock() : ""}
 
 User message:
 ${prompt}`;
 }
 
 /**
- * Natural language: ONE AI call (parse + skeleton) → local catalog enrich.
- * Replaces the old two-call parse-then-huge-catalog-plan flow.
+ * Natural language: ONE AI call (parse + plan). Catalog partner data via MCP tools, not local enrich.
  */
 export async function planFromNaturalLanguage(
   prompt: string
@@ -73,10 +81,9 @@ export async function planFromNaturalLanguage(
       normalizeTripPlanFromLlm(parseLlmJson(raw))
     );
 
-    const { days, ...requestFields } = draft;
+    const { days: _days, ...requestFields } = draft;
     const request = planTripRequestSchema.parse(requestFields);
-    const catalog = await loadCatalog(request.destination);
-    const plan = enrichSkeletonWithCatalog({ days }, request, catalog);
+    const plan = await buildTripPlanFromDraft(draft, request);
 
     return { request, plan };
   } catch (err) {

@@ -55,12 +55,12 @@ Same planning rules as `/plan` (catalog partners, POIs, 14-day max, mock or Curs
 Parsing pipeline (optimized for speed):
 
 1. **keyword-extractor** — interest hints from the prompt (local, instant).
-2. **One AI call** — infers destination, dates, travelers, pace, and a **generic day schedule** (no catalog JSON in the prompt).
-3. **Catalog enrich** (local) — swaps generic blocks for your partner POIs, cabs, restaurants, etc.
+2. **One AI call** — infers destination, dates, travelers, pace, and builds the schedule. Partner names come from **trip-catalog MCP tools** (on demand, not embedded catalog JSON).
+3. **Response shaping** (local) — maps AI JSON to the API `TripPlan` shape (no catalog file matching).
 
 Requires `CURSOR_API_KEY`. Set `CURSOR_MODEL=gemini-3-flash` (default) for faster responses.
 
-**Why this is faster:** the old flow used **two** AI calls and sent the **full catalog** on the second call (~2 min). The new flow uses **one** small AI call + milliseconds of local catalog matching.
+**Why this is faster:** the old flow used **two** AI calls and sent the **full catalog** on the second call (~2 min). The new flow uses **one** AI call; catalog is loaded via MCP tools when needed.
 
 ```bash
 curl -X POST http://localhost:8081/api/trips/plan/natural ^
@@ -116,6 +116,20 @@ Describe the trip in plain language (e.g. “3-day relaxed Jaipur trip for 2, lo
 | `data/pois.jaipur.json` | Tourist spots |
 | `data/destinations.json` | Destination metadata |
 
+## Catalog MCP (for AI)
+
+Mock catalog data is exposed as an MCP server so the Cursor agent can **call tools** instead of embedding JSON in prompts.
+
+**Run the server (stdio):**
+
+```powershell
+npm run mcp:catalog
+```
+
+**Tools:** `list_destinations`, `get_destination`, `list_cabs`, `list_restaurants`, `list_activities`, `list_games`, `get_catalog_bundle`
+
+**Trip planner API:** When `USE_CURSOR_SDK=true`, `runCursorPrompt` attaches the server via `src/utils/mcp-catalog-config.ts` (`USE_CATALOG_MCP=false` to disable). MCP wiring is in code, not `.cursor/` config, so it can be reused when swapping AI SDKs.
+
 ## Cursor SDK (optional)
 
 ```powershell
@@ -147,4 +161,6 @@ trip-planner-server/
       nlp-parser.ai.ts
       nlp-parser.keywords.ts
       catalog.service.ts
+    mcp/
+      catalog-server.ts
 ```

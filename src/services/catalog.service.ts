@@ -65,38 +65,59 @@ export async function loadDestinations(): Promise<DestinationMeta[]> {
   return readJson<DestinationMeta[]>("destinations.json");
 }
 
+async function loadPartners(file: string, city?: string): Promise<PartnerItem[]> {
+  const items = await readJson<PartnerItem[]>(file);
+  const filtered = city ? items.filter((item) => matchesCity(item, city)) : items;
+  return filtered.sort((a, b) => b.priority - a.priority);
+}
+
+export async function loadPartnerCabs(city?: string): Promise<PartnerItem[]> {
+  return loadPartners("partners.cabs.json", city);
+}
+
+export async function loadPartnerRestaurants(city?: string): Promise<PartnerItem[]> {
+  return loadPartners("partners.restaurants.json", city);
+}
+
+export async function loadPartnerActivities(city?: string): Promise<PartnerItem[]> {
+  return loadPartners("partners.activities.json", city);
+}
+
+export async function loadPartnerGames(city?: string): Promise<PartnerItem[]> {
+  return loadPartners("partners.games.json", city);
+}
+
+export async function resolveDestination(
+  destination: string
+): Promise<DestinationMeta | undefined> {
+  const destinations = await loadDestinations();
+  return (
+    destinations.find((d) => d.name.toLowerCase() === destination.toLowerCase()) ??
+    destinations.find((d) => destination.toLowerCase().includes(d.key))
+  );
+}
+
 export async function loadCatalog(destination: string): Promise<CatalogBundle> {
-  const destinations = await readJson<DestinationMeta[]>("destinations.json");
+  const destinations = await loadDestinations();
   const city = normalizeCity(destination);
 
   const dest =
-    destinations.find((d) => d.name.toLowerCase() === destination.toLowerCase()) ??
-    destinations.find((d) => destination.toLowerCase().includes(d.key)) ??
+    (await resolveDestination(destination)) ??
     destinations[0];
 
-    // To DO:
-    // 1. ONly share what is available in the catalog for the destination.
-    // 2. If the destination is not in the catalog, return an error.
-    // 3. If the destination is in the catalog, but the catalog is not available, return an error.
-    // 4. If the catalog is available, but the destination is not in the catalog, return an error.
-
   const [cabs, restaurants, activities, games, pois] = await Promise.all([
-    readJson<PartnerItem[]>("partners.cabs.json"),
-    readJson<PartnerItem[]>("partners.restaurants.json"),
-    readJson<PartnerItem[]>("partners.activities.json"),
-    readJson<PartnerItem[]>("partners.games.json"),
+    loadPartnerCabs(city),
+    loadPartnerRestaurants(city),
+    loadPartnerActivities(city),
+    loadPartnerGames(city),
     readJson<PoiItem[]>(dest.poiFile),
   ]);
 
   return {
-    cabs: cabs.filter((c) => matchesCity(c, city)).sort((a, b) => b.priority - a.priority),
-    restaurants: restaurants
-      .filter((r) => matchesCity(r, city))
-      .sort((a, b) => b.priority - a.priority),
-    activities: activities
-      .filter((a) => matchesCity(a, city))
-      .sort((a, b) => b.priority - a.priority),
-    games: games.filter((g) => matchesCity(g, city)).sort((a, b) => b.priority - a.priority),
+    cabs,
+    restaurants,
+    activities,
+    games,
     pois,
     destination: { ...dest, name: destination },
   };

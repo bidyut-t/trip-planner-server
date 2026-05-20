@@ -14,3 +14,10 @@ export function getNearbyCatalogRadiusKm(): number {
   const n = Number(process.env.NEARBY_CATALOG_RADIUS_KM);
   return Number.isFinite(n) && n > 0 ? n : 4;
 }
+
+/** Attach trip-catalog MCP tools to Cursor agent prompts (default: on when Cursor SDK is on). */
+export function isCatalogMcpEnabled(): boolean {
+  if (process.env.USE_CATALOG_MCP === "false") return false;
+  if (process.env.USE_CATALOG_MCP === "true") return true;
+  return isCursorSdkEnabled();
+}

@@ -4,6 +4,8 @@ import type { DestinationMeta } from "./catalog.service.js";
 import { parseLlmJson } from "../utils/llm-json.js";
 import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
 import { runCursorPrompt } from "../utils/cursor-agent.js";
+import { isCatalogMcpEnabled } from "../utils/env.js";
+import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
 import { buildScheduleRulesBlock } from "./planner.schedule-rules.js";
 
 function buildSkeletonPrompt(input: PlanTripRequest, destination: DestinationMeta): string {
@@ -14,7 +16,7 @@ function buildSkeletonPrompt(input: PlanTripRequest, destination: DestinationMet
 
   return `You are a trip itinerary planner. Reply with JSON only — no markdown, no commentary.
 
-Build a day-by-day schedule skeleton. Do NOT invent partner brand names; use generic titles (e.g. "Morning fort visit", "Lunch", "City transfer").
+Build a day-by-day schedule skeleton.${isCatalogMcpEnabled() ? " Use MCP catalog tools for real partner names when scheduling cabs, restaurants, activities, or games." : ' Do NOT invent partner brand names; use generic titles (e.g. "Morning fort visit", "Lunch", "City transfer").'}
 
 Schema:
 {
@@ -39,7 +41,8 @@ Trip:
 - Travelers: ${input.travelers}
 - Pace: ${input.pace}
 
-${buildScheduleRulesBlock({ includeBlockSchema: true })}`;
+${buildScheduleRulesBlock({ includeBlockSchema: true })}
+${isCatalogMcpEnabled() ? buildCatalogMcpPromptBlock() : ""}`;
 }
 
 export async function planTripAiSkeleton(

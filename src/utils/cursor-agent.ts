@@ -1,4 +1,5 @@
-import { getCursorModelId } from "./env.js";
+import { getCursorModelId, isCatalogMcpEnabled } from "./env.js";
+import { getTripCatalogMcpServers } from "./mcp-catalog-config.js";
 
 export async function runCursorPrompt(prompt: string): Promise<string> {
   const apiKey = process.env.CURSOR_API_KEY;
@@ -11,6 +12,7 @@ export async function runCursorPrompt(prompt: string): Promise<string> {
     apiKey,
     model: { id: getCursorModelId() },
     local: { cwd: process.cwd() },
+    ...(isCatalogMcpEnabled() ? { mcpServers: getTripCatalogMcpServers() } : {}),
   });
 
   const raw = result.result?.trim();
