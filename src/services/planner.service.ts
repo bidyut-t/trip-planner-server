@@ -1,12 +1,11 @@
 import type { PlanTripRequest, TripPlan } from "../schemas/trip-plan.schema.js";
 import { loadCatalog } from "./catalog.service.js";
 import { planTripMock } from "./planner.mock.js";
-import { planTripCursor } from "./planner.cursor.js";
+import { planTripHybrid } from "./planner.hybrid.js";
 import { eachDay } from "../utils/dates.js";
 import { isCursorSdkEnabled } from "../utils/env.js";
 
 export async function planTrip(input: PlanTripRequest): Promise<TripPlan> {
-  console.log("inside plan trip ")
   const days = eachDay(input.startDate, input.endDate);
   if (days.length === 0) {
     throw new Error("endDate must be on or after startDate");
@@ -17,9 +16,10 @@ export async function planTrip(input: PlanTripRequest): Promise<TripPlan> {
 
   const catalog = await loadCatalog(input.destination);
   if (isCursorSdkEnabled()) {
-    console.log("Using Cursor SDK");
-    return planTripCursor(input, catalog);
+    const t0 = Date.now();
+    const plan = await planTripHybrid(input, catalog);
+    console.log(`[planner] hybrid done in ${Date.now() - t0}ms`);
+    return plan;
   }
-  console.log("Using mock planner");
   return planTripMock(input, catalog);
 }

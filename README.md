@@ -52,13 +52,15 @@ Invoke-RestMethod -Uri "http://localhost:8081/api/trips/plan" -Method Post -Body
 
 Same planning rules as `/plan` (catalog partners, POIs, 14-day max, mock or Cursor planner).
 
-Parsing pipeline:
+Parsing pipeline (optimized for speed):
 
-1. **keyword-extractor** — pulls candidate interest words from the prompt (no hardcoded interest list).
-2. **Cursor AI** — infers destination, dates, trip length, travelers, pace, and final interests from the message (and keyword hints).
-3. **Planner** — builds the itinerary from the structured `request`.
+1. **keyword-extractor** — interest hints from the prompt (local, instant).
+2. **One AI call** — infers destination, dates, travelers, pace, and a **generic day schedule** (no catalog JSON in the prompt).
+3. **Catalog enrich** (local) — swaps generic blocks for your partner POIs, cabs, restaurants, etc.
 
-Requires `CURSOR_API_KEY` in `.env` (independent of `USE_CURSOR_SDK` for the itinerary planner).
+Requires `CURSOR_API_KEY`. Set `CURSOR_MODEL=gemini-3-flash` (default) for faster responses.
+
+**Why this is faster:** the old flow used **two** AI calls and sent the **full catalog** on the second call (~2 min). The new flow uses **one** small AI call + milliseconds of local catalog matching.
 
 ```bash
 curl -X POST http://localhost:8081/api/trips/plan/natural ^

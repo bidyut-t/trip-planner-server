@@ -53,28 +53,10 @@ export async function parseTripRequestWithAi(
   destinations: DestinationMeta[],
   suggestedKeywords: string[]
 ): Promise<PlanTripRequest> {
-  const apiKey = process.env.CURSOR_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "CURSOR_API_KEY is required for natural language planning. Set it in .env (see .env.example)."
-    );
-  }
-
-  const { Agent } = await import("@cursor/sdk");
-  const result = await Agent.prompt(
-    buildParsePrompt(prompt, destinations, suggestedKeywords),
-    {
-      apiKey,
-      model: { id: "composer-2" },
-      local: { cwd: process.cwd() },
-    }
+  const { runCursorPrompt } = await import("../utils/cursor-agent.js");
+  const raw = await runCursorPrompt(
+    buildParsePrompt(prompt, destinations, suggestedKeywords)
   );
-
-  const raw = result.result?.trim();
-  if (!raw) {
-    throw new Error("AI parser returned an empty response");
-  }
-
   const parsed = parseLlmJson(raw);
   return planTripRequestSchema.parse(parsed);
 }

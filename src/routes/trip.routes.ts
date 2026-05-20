@@ -4,7 +4,7 @@ import {
   planTripNaturalRequestSchema,
   planTripRequestSchema,
 } from "../schemas/trip-plan.schema.js";
-import { parseTripRequestFromNaturalLanguage } from "../services/nlp-parser.service.js";
+import { planFromNaturalLanguage } from "../services/natural-planner.service.js";
 import { planTrip } from "../services/planner.service.js";
 
 export const tripRouter = Router();
@@ -34,9 +34,8 @@ tripRouter.post("/plan", async (req, res) => {
 tripRouter.post("/plan/natural", async (req, res) => {
   try {
     const { prompt } = planTripNaturalRequestSchema.parse(req.body);
-    const request = await parseTripRequestFromNaturalLanguage(prompt);
-    const plan = await planTrip(request);
-    res.json({ request, plan });
+    const result = await planFromNaturalLanguage(prompt);
+    res.json(result);
   } catch (err) {
     handlePlanError(err, res);
   }
