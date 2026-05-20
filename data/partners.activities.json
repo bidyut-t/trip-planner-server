@@ -5,7 +5,9 @@
     "city": "Jaipur",
     "tags": ["history", "walking", "culture"],
     "durationMinutes": 120,
-    "priority": 8
+    "priority": 8,
+    "latitude": 26.9239,
+    "longitude": 75.8267
   },
   {
     "id": "act-2",
@@ -13,6 +15,8 @@
     "city": "Jaipur",
     "tags": ["food", "culture"],
     "durationMinutes": 150,
-    "priority": 6
+    "priority": 6,
+    "latitude": 26.9038,
+    "longitude": 75.7856
   }
 ]

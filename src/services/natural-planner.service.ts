@@ -8,6 +8,7 @@ import { planTripMock } from "./planner.mock.js";
 import { parseLlmJson } from "../utils/llm-json.js";
 import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
 import { runCursorPrompt } from "../utils/cursor-agent.js";
+import { buildScheduleRulesBlock } from "./planner.schedule-rules.js";
 
 function buildNaturalPlanPrompt(
   prompt: string,
@@ -35,7 +36,9 @@ Schema:
       "start": "HH:MM", "end": "HH:MM",
       "type": "cab"|"sightseeing"|"restaurant"|"activity"|"game"|"free"|"travel",
       "title": string,
-      "notes"?: string
+      "notes"?: string,
+      "latitude"?: number,
+      "longitude"?: number
     }]
   }]
 }
@@ -43,10 +46,7 @@ Schema:
 Infer destination, dates (today is ${today}), travelers, pace, and interests from the message.
 Keyword hints: ${keywordHint}
 
-Schedule rules:
-- Generic titles only (no invented partner brands)
-- One days[] entry per calendar day between startDate and endDate
-- Times 08:30–22:00; singular block types only
+${buildScheduleRulesBlock({ includeBlockSchema: true })}
 
 Supported destinations:
 ${destList}
@@ -65,7 +65,6 @@ export async function planFromNaturalLanguage(
   const destinations = await loadDestinations();
   const suggestedKeywords = extractPromptKeywords(prompt);
 
-  const t0 = Date.now();
   try {
     const raw = await runCursorPrompt(
       buildNaturalPlanPrompt(prompt, destinations, suggestedKeywords)
@@ -79,7 +78,6 @@ export async function planFromNaturalLanguage(
     const catalog = await loadCatalog(request.destination);
     const plan = enrichSkeletonWithCatalog({ days }, request, catalog);
 
-    console.log(`[natural-planner] done in ${Date.now() - t0}ms (1 AI call + catalog enrich)`);
     return { request, plan };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);

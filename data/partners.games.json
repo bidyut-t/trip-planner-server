@@ -5,6 +5,8 @@
     "city": "Jaipur",
     "tags": ["games", "evening", "family"],
     "durationMinutes": 90,
-    "priority": 7
+    "priority": 7,
+    "latitude": 26.8548,
+    "longitude": 75.8172
   }
 ]

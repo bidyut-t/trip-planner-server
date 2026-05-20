@@ -5,7 +5,12 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, "..", "..", "data");
 
-export interface PartnerItem {
+export interface GeoTaggedItem {
+  latitude?: number;
+  longitude?: number;
+}
+
+export interface PartnerItem extends GeoTaggedItem {
   id: string;
   name: string;
   city: string;
@@ -14,7 +19,7 @@ export interface PartnerItem {
   priority: number;
 }
 
-export interface PoiItem {
+export interface PoiItem extends GeoTaggedItem {
   id: string;
   name: string;
   tags: string[];
@@ -25,6 +30,8 @@ export interface DestinationMeta {
   key: string;
   name: string;
   timezone: string;
+  latitude?: number;
+  longitude?: number;
   summary: string;
   tips: string[];
   poiFile: string;

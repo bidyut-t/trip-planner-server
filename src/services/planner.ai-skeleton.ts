@@ -4,6 +4,7 @@ import type { DestinationMeta } from "./catalog.service.js";
 import { parseLlmJson } from "../utils/llm-json.js";
 import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
 import { runCursorPrompt } from "../utils/cursor-agent.js";
+import { buildScheduleRulesBlock } from "./planner.schedule-rules.js";
 
 function buildSkeletonPrompt(input: PlanTripRequest, destination: DestinationMeta): string {
   const dayCount =
@@ -24,7 +25,9 @@ Schema:
       "end": "HH:MM",
       "type": "cab"|"sightseeing"|"restaurant"|"activity"|"game"|"free"|"travel",
       "title": string,
-      "notes"?: string
+      "notes"?: string,
+      "latitude"?: number,
+      "longitude"?: number
     }]
   }]
 }
@@ -36,12 +39,7 @@ Trip:
 - Travelers: ${input.travelers}
 - Pace: ${input.pace}
 
-Rules:
-- One entry per calendar day from ${input.startDate} through ${input.endDate}
-- Times between 08:30 and 22:00 with 15–30 min gaps
-- Mix sightseeing, meals, transfers, some free time
-- Use block types that fit: cab for transfers, restaurant for meals, sightseeing for sights
-- Singular type names only (activity, not activities)`;
+${buildScheduleRulesBlock({ includeBlockSchema: true })}`;
 }
 
 export async function planTripAiSkeleton(

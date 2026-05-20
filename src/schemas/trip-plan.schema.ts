@@ -41,6 +41,8 @@ export const planBlockSchema = z.object({
   source: z.preprocess(normalizeSource, z.enum(["poi", "partner", "suggested"])).optional(),
   matchedInterest: z.string().optional(),
   notes: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
   addFromOurRecommendation: z.preprocess(
     (v) => (typeof v === "boolean" ? v : false),
     z.boolean()

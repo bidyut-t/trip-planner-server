@@ -20,6 +20,8 @@ export const skeletonBlockSchema = z.object({
   type: skeletonBlockTypeSchema,
   title: z.string(),
   notes: z.string().optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export const skeletonDaySchema = z.object({

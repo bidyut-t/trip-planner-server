@@ -5,7 +5,9 @@
     "city": "Jaipur",
     "tags": ["lunch", "dinner", "food", "rajasthani"],
     "durationMinutes": 90,
-    "priority": 10
+    "priority": 10,
+    "latitude": 26.9167,
+    "longitude": 75.812
   },
   {
     "id": "rest-2",
@@ -13,6 +15,8 @@
     "city": "Jaipur",
     "tags": ["dinner", "food", "evening"],
     "durationMinutes": 75,
-    "priority": 7
+    "priority": 7,
+    "latitude": 26.927,
+    "longitude": 75.823
   }
 ]

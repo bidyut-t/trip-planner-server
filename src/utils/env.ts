@@ -8,3 +8,9 @@ export function isCursorSdkEnabled(): boolean {
 export function getCursorModelId(): string {
   return process.env.CURSOR_MODEL ?? "gemini-3-flash";
 }
+
+/** Max km from current plan location to swap in a catalog restaurant/activity/game. */
+export function getNearbyCatalogRadiusKm(): number {
+  const n = Number(process.env.NEARBY_CATALOG_RADIUS_KM);
+  return Number.isFinite(n) && n > 0 ? n : 4;
+}
