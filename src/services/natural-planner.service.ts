@@ -13,8 +13,6 @@ import { runOpenAiPrompt } from "../utils/openai-mcp-agent.js";
 import { isCatalogMcpEnabled } from "../utils/env.js";
 import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
 import { buildScheduleRulesBlock } from "./prompts/planner.schedule-rules.js";
-import { addMapLinksToTripPlan } from "../utils/google-maps.js";
-import { loadUserProfiles } from "./catalog/catalog.service.js";
 import { 
   validatePartnerInPlan,
   getPartnerValidationSummary 
