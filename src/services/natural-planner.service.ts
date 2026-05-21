@@ -8,16 +8,11 @@ import {
   type DestinationMeta,
 } from "./catalog/catalog.service.js";
 import { extractPromptKeywords } from "./nlp/nlp-parser.keywords.js";
-import { buildTripPlanFromDraft } from "./planner.from-draft.js";
-import { planTripMock } from "./planner.mock.js";
 import { parseLlmJson } from "../utils/llm-json.js";
-import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
 import { runOpenAiPrompt } from "../utils/openai-mcp-agent.js";
 import { isCatalogMcpEnabled } from "../utils/env.js";
 import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
 import { buildScheduleRulesBlock } from "./prompts/planner.schedule-rules.js";
-import { addMapLinksToTripPlan } from "../utils/google-maps.js";
-import { loadUserProfiles } from "./catalog/catalog.service.js";
 import { 
   validatePartnerInPlan,
   getPartnerValidationSummary 
@@ -77,29 +72,6 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
   return result;
 }
 
-/**
- * ARIA: Build the AI prompt for natural language trip planning with optional personalization
- * 
- * Constructs the complete prompt sent to the AI, including:
- * - Available destinations and keywords
- * - MCP tool calling instructions (if enabled)
- * - User profile personalization context (if provided)
- * - JSON schema and formatting rules
- * 
- * When a userProfile is provided, the AI receives detailed constraints about:
- * - Dietary restrictions (vegetarian, vegan, gluten-free, etc.)
- * - Accessibility needs (wheelchair accessible, hearing impaired, etc.)
- * - Budget level (budget, moderate, luxury)
- * - Travel style (adventure, relaxation, cultural, foodie, mixed)
- * - Preferences (avoid crowds, local experiences, fitness level)
- * 
- * @param prompt - User's natural language request
- * @param destinations - Available destinations
- * @param suggestedKeywords - Keywords extracted from prompt
- * @param userProfile - Optional user profile for personalized planning
- * @returns Complete prompt string for AI with all context and instructions
- * @author Aria
- */
 function buildNaturalPlanPrompt(
   prompt: string,
   destinations: DestinationMeta[],
@@ -113,11 +85,7 @@ function buildNaturalPlanPrompt(
   const keywordHint =
     suggestedKeywords.length > 0 ? suggestedKeywords.join(", ") : "(none)";
 
-  const catalogHint = isCatalogMcpEnabled()
-    ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use realistic provider names."
-    : "";
-
-  // ARIA: User Profile Personalization Integration
+    // ARIA: User Profile Personalization Integration
   // If a user profile is provided, inject it into the AI prompt with strong constraints.
   // This makes the AI consider dietary restrictions, accessibility, budget, travel style,
   // and preferences (crowds, local experiences, fitness level) when generating the plan.
@@ -142,7 +110,10 @@ CRITICAL INSTRUCTIONS:
 - If avoiding crowds, prefer early morning or late evening activities
 ` : "";
 
-  return `Parse the user message and build a complete trip schedule.${catalogHint}${profileContext} Reply with JSON only — no markdown.
+  const catalogHint = isCatalogMcpEnabled()
+    ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use realistic provider names."
+    : "";
+  return `Parse the user message and build a complete trip schedule.${catalogHint} Reply with JSON only — no markdown.
 
 Schema:
 {
@@ -253,8 +224,7 @@ ${prompt}`;
  */
 export async function planFromNaturalLanguage(
   prompt: string,
-  userId?: string,
-): Promise<{ request: PlanTripRequest; plan: TripPlan }> {
+): Promise<any> {
   const destinations = await loadDestinations();
   const suggestedKeywords = extractPromptKeywords(prompt);
 
@@ -290,8 +260,9 @@ export async function planFromNaturalLanguage(
     
     // Validate and enrich partner information
     const validatedResult = await validateAndEnrichNewSchemaPartners(result);
-    // plan = addMapLinksToTripPlan(plan, userWantsMap);
+    
     return validatedResult;
+
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     console.warn("[natural-planner] AI failed, falling back to mock:", detail);
