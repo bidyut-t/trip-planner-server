@@ -25,8 +25,10 @@ export const planTripRequestSchema = z.object({
 
 export type PlanTripRequest = z.infer<typeof planTripRequestSchema>;
 
+// ARIA: Natural language request schema with optional user profile selection
 export const planTripNaturalRequestSchema = z.object({
   prompt: z.string().min(3).max(2000),
+  userId: z.string().optional(),  // ARIA: Optional user ID to select which profile to use
 });
 
 export type PlanTripNaturalRequest = z.infer<typeof planTripNaturalRequestSchema>;
@@ -49,9 +51,12 @@ export const planBlockSchema = z.object({
   ),
 });
 
+// ARIA: Added mapLink field to support per-day Google Maps route links
+// Generated programmatically (not by AI) to ensure reliability
 export const dayPlanSchema = z.object({
   date: z.string(),
   blocks: z.array(planBlockSchema),
+  mapLink: z.string().url().optional(), // ARIA: Per-day map link
 });
 
 export const destinationInfoSchema = z.object({
@@ -86,3 +91,14 @@ export const planTripNaturalResponseSchema = z.object({
 });
 
 export type PlanTripNaturalResponse = z.infer<typeof planTripNaturalResponseSchema>;
+
+// ARIA: Conversational refinement request schema for iterative plan modifications
+// Allows users to refine existing plans with natural language feedback
+// Example: "I'll be with my mom, adjust for accessibility" or "Add kid-friendly activities"
+export const refinePlanRequestSchema = z.object({
+  originalPlan: tripPlanSchema,  // ARIA: Full plan object to be refined
+  feedback: z.string().min(3).max(1000),  // ARIA: Natural language modification request
+  userId: z.string().optional(),  // ARIA: Optional user ID to maintain profile context
+});
+
+export type RefinePlanRequest = z.infer<typeof refinePlanRequestSchema>;

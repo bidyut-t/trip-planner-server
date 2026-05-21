@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { UserProfile } from "../../schemas/user-profile.schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dataDir = path.join(__dirname, "..", "..", "..", "data");
@@ -85,6 +86,30 @@ export async function loadPartnerActivities(city?: string): Promise<PartnerItem[
 
 export async function loadPartnerGames(city?: string): Promise<PartnerItem[]> {
   return loadPartners("partners.games.json", city);
+}
+
+/**
+ * ARIA: Load user profiles from JSON file
+ * 
+ * Follows the same pattern as partner data loading.
+ * Profiles contain dietary restrictions, accessibility needs, budget level,
+ * and travel preferences for personalized trip planning.
+ * 
+ * @returns Array of user profiles for CodeFest demo (5 team members)
+ */
+export async function loadUserProfiles(): Promise<UserProfile[]> {
+  return readJson<UserProfile[]>("user-profiles.json");
+}
+
+/**
+ * ARIA: Get a specific user profile by ID
+ * 
+ * @param userId - User profile ID (e.g., "user-001")
+ * @returns User profile if found, undefined otherwise
+ */
+export async function getUserProfile(userId: string): Promise<UserProfile | undefined> {
+  const profiles = await loadUserProfiles();
+  return profiles.find(p => p.id === userId);
 }
 
 export async function resolveDestination(
