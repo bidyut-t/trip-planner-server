@@ -1,12 +1,12 @@
 import type { PlanTripRequest } from "../schemas/trip-plan.schema.js";
 import { tripSkeletonSchema, type TripSkeleton } from "../schemas/skeleton-plan.schema.js";
-import type { DestinationMeta } from "./catalog.service.js";
+import type { DestinationMeta } from "./catalog/catalog.service.js";
 import { parseLlmJson } from "../utils/llm-json.js";
 import { normalizeTripPlanFromLlm } from "../utils/normalize-llm-output.js";
-import { runCursorPrompt } from "../utils/cursor-agent.js";
+import { runOpenAiPrompt } from "../utils/openai-agent.js";
 import { isCatalogMcpEnabled } from "../utils/env.js";
 import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
-import { buildScheduleRulesBlock } from "./planner.schedule-rules.js";
+import { buildScheduleRulesBlock } from "./prompts/planner.schedule-rules.js";
 
 function buildSkeletonPrompt(input: PlanTripRequest, destination: DestinationMeta): string {
   const dayCount =
@@ -49,7 +49,7 @@ export async function planTripAiSkeleton(
   input: PlanTripRequest,
   destination: DestinationMeta
 ): Promise<TripSkeleton> {
-  const raw = await runCursorPrompt(buildSkeletonPrompt(input, destination));
+  const raw = await runOpenAiPrompt(buildSkeletonPrompt(input, destination));
   const json = parseLlmJson(raw) as Record<string, unknown>;
   const skeletonInput = Array.isArray(json.days) ? { days: json.days } : json;
   return tripSkeletonSchema.parse(normalizeTripPlanFromLlm(skeletonInput));

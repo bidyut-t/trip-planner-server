@@ -1,7 +1,8 @@
 import type { PlanTripRequest, PlanBlock, TripPlan } from "../schemas/trip-plan.schema.js";
 import { tripPlanSchema } from "../schemas/trip-plan.schema.js";
 import type { NaturalPlanDraft } from "../schemas/skeleton-plan.schema.js";
-import { loadDestinations, resolveDestination } from "./catalog.service.js";
+import { loadDestinations, resolveDestination } from "./catalog/catalog.service.js";
+import { validateAndFixPlanBlocks, getPartnerValidationSummary } from "./partner-validation.service.js";
 
 const PARTNER_TYPES = new Set<PlanBlock["type"]>(["cab", "restaurant", "activity", "game"]);
 
@@ -51,10 +52,34 @@ export async function buildTripPlanFromDraft(
   const destMeta =
     (await resolveDestination(request.destination)) ?? (await loadDestinations())[0];
 
-  const days = draft.days.map((day) => ({
-    date: day.date,
-    blocks: day.blocks.map(skeletonBlockToPlanBlock),
+  // Extract city name for partner validation
+  const city = request.destination.split(",")[0]?.trim() || request.destination;
+
+  const days = await Promise.all(draft.days.map(async (day) => {
+    const initialBlocks = day.blocks.map(skeletonBlockToPlanBlock);
+    const validatedBlocks = await validateAndFixPlanBlocks(initialBlocks, city);
+    
+    return {
+      date: day.date,
+      blocks: validatedBlocks,
+    };
   }));
+
+  // Get validation summary for logging
+  const allBlocks = days.flatMap(day => day.blocks);
+  const validationSummary = await getPartnerValidationSummary(allBlocks, city);
+  
+  console.log(`[partner-validation] City: ${city}`);
+  console.log(`[partner-validation] Partner blocks: ${validationSummary.totalPartnerBlocks}`);
+  console.log(`[partner-validation] Valid: ${validationSummary.validPartnerBlocks}`);
+  console.log(`[partner-validation] Invalid: ${validationSummary.invalidPartnerBlocks}`);
+  
+  if (validationSummary.suggestedCorrections.length > 0) {
+    console.log(`[partner-validation] Suggested corrections:`);
+    validationSummary.suggestedCorrections.forEach(correction => {
+      console.log(`  - "${correction.originalProvider}" → "${correction.suggestedProvider}" in "${correction.blockTitle}"`);
+    });
+  }
 
   return tripPlanSchema.parse({
     destination: {
@@ -68,6 +93,6 @@ export async function buildTripPlanFromDraft(
     interests: request.interests,
     days,
     partnerPlacements: collectPartnerPlacements(days),
-    plannerMode: "cursor",
+    plannerMode: "openai",
   });
 }

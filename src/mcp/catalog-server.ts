@@ -14,7 +14,7 @@ import {
   loadPartnerRestaurants,
   resolveDestination,
   type DestinationMeta,
-} from "../services/catalog.service.js";
+} from "../services/catalog/catalog.service.js";
 
 function jsonText(data: unknown) {
   return {

@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, "..", "..", "data");
+const dataDir = path.join(__dirname, "..", "..", "..", "data");
 
 export interface GeoTaggedItem {
   latitude?: number;

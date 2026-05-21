@@ -27,30 +27,9 @@ Server: **http://localhost:8081** (or `PORT` from `.env`)
 curl http://localhost:8081/health
 ```
 
-### Plan a trip (structured JSON)
-
-```bash
-curl -X POST http://localhost:8081/api/trips/plan ^
-  -H "Content-Type: application/json" ^
-  -d "{\"destination\":\"Jaipur, India\",\"startDate\":\"2026-06-10\",\"endDate\":\"2026-06-12\",\"interests\":[\"history\",\"food\",\"photography\"]}"
-```
-
-**PowerShell:**
-
-```powershell
-$body = @{
-  destination = "Jaipur, India"
-  startDate   = "2026-06-10"
-  endDate     = "2026-06-12"
-  interests   = @("history", "food", "photography")
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "http://localhost:8081/api/trips/plan" -Method Post -Body $body -ContentType "application/json"
-```
-
 ### Plan a trip (natural language)
 
-Same planning rules as `/plan` (catalog partners, POIs, 14-day max, mock or Cursor planner).
+Uses the same planning rules (catalog partners, POIs, 14-day max, mock or Cursor planner).
 
 Parsing pipeline (optimized for speed):
 
@@ -85,17 +64,6 @@ Response shape: `{ "request": { ... }, "plan": { ... } }` — `request` is the p
 ```bash
 curl http://localhost:8081/api/catalog/Jaipur%2C%20India
 ```
-
-## Request body
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `destination` | yes | e.g. `Jaipur, India` |
-| `startDate` | yes | `YYYY-MM-DD` |
-| `endDate` | yes | `YYYY-MM-DD` |
-| `interests` | no | e.g. `["history","food"]` |
-| `travelers` | no | default `2` |
-| `pace` | no | `relaxed` \| `moderate` \| `packed` |
 
 ### Natural language (`POST /api/trips/plan/natural`)
 

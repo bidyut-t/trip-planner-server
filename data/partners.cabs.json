@@ -1,9 +1,9 @@
 [
   {
     "id": "cab-1",
-    "name": "YourCab Co",
+    "name": "Raj Taxi Services",
     "city": "Jaipur",
-    "tags": ["airport", "city", "transfer"],
+    "tags": ["airport", "city", "transfer", "premium"],
     "durationMinutes": 45,
     "priority": 10
   },
@@ -11,7 +11,7 @@
     "id": "cab-2",
     "name": "YourCab Premium",
     "city": "Jaipur",
-    "tags": ["city", "evening"],
+    "tags": ["city", "evening", "luxury"],
     "durationMinutes": 30,
     "priority": 8
   }

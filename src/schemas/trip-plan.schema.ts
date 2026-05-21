@@ -74,7 +74,7 @@ export const tripPlanSchema = z.object({
   interests: z.array(z.string()),
   days: z.array(dayPlanSchema),
   partnerPlacements: z.array(partnerPlacementSchema),
-  plannerMode: z.enum(["mock", "cursor"]),
+  plannerMode: z.enum(["mock", "openai"]),
 });
 
 export type TripPlan = z.infer<typeof tripPlanSchema>;

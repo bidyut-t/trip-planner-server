@@ -1,7 +1,7 @@
 [
   {
     "id": "rest-1",
-    "name": "Partner Spice House",
+    "name": "Spice Court Restaurant",
     "city": "Jaipur",
     "tags": ["lunch", "dinner", "food", "rajasthani"],
     "durationMinutes": 90,
@@ -11,12 +11,32 @@
   },
   {
     "id": "rest-2",
-    "name": "Partner Rooftop Grill",
+    "name": "Peacock Rooftop Restaurant",
     "city": "Jaipur",
-    "tags": ["dinner", "food", "evening"],
+    "tags": ["dinner", "food", "evening", "rooftop"],
     "durationMinutes": 75,
-    "priority": 7,
+    "priority": 9,
     "latitude": 26.927,
     "longitude": 75.823
+  },
+  {
+    "id": "rest-3",
+    "name": "Handi Restaurant",
+    "city": "Jaipur",
+    "tags": ["dinner", "food", "traditional", "rajasthani"],
+    "durationMinutes": 80,
+    "priority": 8,
+    "latitude": 26.9124,
+    "longitude": 75.7873
+  },
+  {
+    "id": "rest-4",
+    "name": "Amber Café",
+    "city": "Jaipur",
+    "tags": ["lunch", "breakfast", "coffee", "light"],
+    "durationMinutes": 60,
+    "priority": 6,
+    "latitude": 26.9848,
+    "longitude": 75.8502
   }
 ]
