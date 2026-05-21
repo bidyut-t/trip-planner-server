@@ -184,5 +184,6 @@ export function planTripMock(input: PlanTripRequest, catalog: CatalogBundle): Tr
       return { service: name, category: v.category, count: v.count };
     }),
     plannerMode: "mock",
+    mapLink: undefined,
   };
 }

@@ -17,7 +17,9 @@ import {
   validatePartnerInPlan,
   getPartnerValidationSummary 
 } from "./partner-validation.service.js";
+import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 import { loadUserProfiles } from "./catalog/catalog.service.js";
+
 /**
  * Validate and enrich partner information in the new schema format
  */
@@ -72,6 +74,30 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
   return result;
 }
 
+
+/**
+ * ARIA: Build the AI prompt for natural language trip planning with optional personalization
+ * 
+ * Constructs the complete prompt sent to the AI, including:
+ * - Available destinations and keywords
+ * - MCP tool calling instructions (if enabled)
+ * - User profile personalization context (if provided)
+ * - JSON schema and formatting rules
+ * 
+ * When a userProfile is provided, the AI receives detailed constraints about:
+ * - Dietary restrictions (vegetarian, vegan, gluten-free, etc.)
+ * - Accessibility needs (wheelchair accessible, hearing impaired, etc.)
+ * - Budget level (budget, moderate, luxury)
+ * - Travel style (adventure, relaxation, cultural, foodie, mixed)
+ * - Preferences (avoid crowds, local experiences, fitness level)
+ * 
+ * @param prompt - User's natural language request
+ * @param destinations - Available destinations
+ * @param suggestedKeywords - Keywords extracted from prompt
+ * @param userProfile - Optional user profile for personalized planning
+ * @returns Complete prompt string for AI with all context and instructions
+ * @author Aria
+ */
 function buildNaturalPlanPrompt(
   prompt: string,
   destinations: DestinationMeta[],
