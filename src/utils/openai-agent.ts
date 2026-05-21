@@ -8,6 +8,7 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 export async function runOpenAiPrompt(prompt: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
   if (!apiKey) {
     throw new Error(
       "OPENAI_API_KEY is required. Set it in .env (see .env.example).",
@@ -16,7 +17,7 @@ export async function runOpenAiPrompt(prompt: string): Promise<string> {
 
   const client = new OpenAI({
     apiKey,
-    baseURL: "https://d1t4hkdc2i746c.cloudfront.net",
+    baseURL,
     httpAgent: new https.Agent({
       rejectUnauthorized: false, // Allow self-signed certificates
     }),

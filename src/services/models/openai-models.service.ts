@@ -9,13 +9,14 @@ export interface OpenAiModel {
 
 export async function listAvailableModels(): Promise<OpenAiModel[]> {
   const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required to list models");
   }
 
   const client = new OpenAI({
     apiKey,
-    baseURL: "https://d1t4hkdc2i746c.cloudfront.net",
+    baseURL,
   });
   const response = await client.models.list();
   return response.data;

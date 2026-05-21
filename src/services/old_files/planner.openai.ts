@@ -51,6 +51,7 @@ export async function planTripOpenAi(
   catalog: CatalogBundle,
 ): Promise<TripPlan> {
   const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
   if (!apiKey) {
     throw new Error("OPENAI_API_KEY is required when USE_OPENAI_SDK=true");
   }
@@ -58,7 +59,7 @@ export async function planTripOpenAi(
   try {
     const client = new OpenAI({
       apiKey,
-      baseURL: "https://d1t4hkdc2i746c.cloudfront.net",
+      baseURL,
     });
     const completion = await client.chat.completions.create({
       model: getOpenAiModelId(),
