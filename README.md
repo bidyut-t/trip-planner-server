@@ -1,134 +1,254 @@
 # Trip Planner Server
 
-Node.js API that builds **time-based trip itineraries** with partner restaurants, cabs, activities, and games. Uses a **mock planner** by default; optional **Cursor SDK** when configured.
+Node.js API that creates intelligent trip itineraries using AI and partner data. Generates day-by-day schedules with restaurants, activities, transportation, and sightseeing recommendations.
 
-## Folder location
+## 🚀 Installation
 
-```
-C:\Users\ACER\trip-planner-server
-```
+### Prerequisites
+- Node.js 18+ 
+- npm or yarn
 
-## Quick start
+### Setup
 
-```powershell
-cd C:\Users\ACER\trip-planner-server
-copy .env.example .env
-npm install
+1. **Clone and install**
+   ```bash
+   git clone <repository-url>
+   cd trip-planner-server
+   npm install
+
+   Incase facing certificate problem 
+   
+   NODE_TLS_REJECT_UNAUTHORIZED npm i
+
+   
+   ```
+
+2. **Environment setup**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Configure environment variables**
+   ```env
+   PORT=8081
+   USE_OPENAI_SDK=true
+   OPENAI_API_KEY=your-openai-api-key
+   OPENAI_MODEL=gpt-4o-mini
+   USE_CATALOG_MCP=true
+   NEARBY_CATALOG_RADIUS_KM=4
+   ```
+
+## 🏃 Running the Server
+
+### Development
+```bash
 npm run dev
 ```
 
-Server: **http://localhost:8081** (or `PORT` from `.env`)
-
-## API
-
-### Health
-
+### Production
 ```bash
-curl http://localhost:8081/health
+npm start
 ```
 
-### Plan a trip (natural language)
-
-Uses the same planning rules (catalog partners, POIs, 14-day max, mock or Cursor planner).
-
-Parsing pipeline (optimized for speed):
-
-1. **keyword-extractor** — interest hints from the prompt (local, instant).
-2. **One AI call** — infers destination, dates, travelers, pace, and builds the schedule. Partner names come from **trip-catalog MCP tools** (on demand, not embedded catalog JSON).
-3. **Response shaping** (local) — maps AI JSON to the API `TripPlan` shape (no catalog file matching).
-
-Requires `CURSOR_API_KEY`. Set `CURSOR_MODEL=gemini-3-flash` (default) for faster responses.
-
-**Why this is faster:** the old flow used **two** AI calls and sent the **full catalog** on the second call (~2 min). The new flow uses **one** AI call; catalog is loaded via MCP tools when needed.
-
+### MCP Catalog Server (for AI tools)
 ```bash
-curl -X POST http://localhost:8081/api/trips/plan/natural ^
-  -H "Content-Type: application/json" ^
-  -d "{\"prompt\":\"Plan a relaxed 3-day Jaipur trip for 2 people from 2026-06-10. We love history, food, and photography.\"}"
-```
-
-**PowerShell:**
-
-```powershell
-$body = @{
-  prompt = "Plan a relaxed 3-day Jaipur trip for 2 people from 2026-06-10. We love history, food, and photography."
-} | ConvertTo-Json
-
-Invoke-RestMethod -Uri "http://localhost:8081/api/trips/plan/natural" -Method Post -Body $body -ContentType "application/json"
-```
-
-Response shape: `{ "request": { ... }, "plan": { ... } }` — `request` is the parsed structured input used for planning.
-
-### View catalog for a destination
-
-```bash
-curl http://localhost:8081/api/catalog/Jaipur%2C%20India
-```
-
-### Natural language (`POST /api/trips/plan/natural`)
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `prompt` | yes | Free-text trip description (3–2000 chars) |
-
-Describe the trip in plain language (e.g. “3-day relaxed Jaipur trip for 2, love history and food, starting June 10 2026”). AI resolves dates and traveler count.
-
-## Mock data
-
-| File | Purpose |
-|------|---------|
-| `data/partners.cabs.json` | Partner cab services |
-| `data/partners.restaurants.json` | Partner restaurants |
-| `data/partners.activities.json` | Partner activities |
-| `data/partners.games.json` | Partner games |
-| `data/pois.jaipur.json` | Tourist spots |
-| `data/destinations.json` | Destination metadata |
-
-## Catalog MCP (for AI)
-
-Mock catalog data is exposed as an MCP server so the Cursor agent can **call tools** instead of embedding JSON in prompts.
-
-**Run the server (stdio):**
-
-```powershell
 npm run mcp:catalog
 ```
 
-**Tools:** `list_destinations`, `get_destination`, `list_cabs`, `list_restaurants`, `list_activities`, `list_games`, `get_catalog_bundle`
+**Server URL:** `http://localhost:8081`
 
-**Trip planner API:** When `USE_CURSOR_SDK=true`, `runCursorPrompt` attaches the server via `src/utils/mcp-catalog-config.ts` (`USE_CATALOG_MCP=false` to disable). MCP wiring is in code, not `.cursor/` config, so it can be reused when swapping AI SDKs.
+## 📋 API Endpoints
 
-## Cursor SDK (optional)
-
-```powershell
-npm install @cursor/sdk
+### Health Check
+```bash
+GET /health
 ```
 
-In `.env`:
-
+**Response:**
+```json
+{
+  "ok": true,
+  "plannerMode": "openai"
+}
 ```
-USE_CURSOR_SDK=true
-CURSOR_API_KEY=your-key-from-cursor-dashboard
+
+### Trip Planning (Natural Language)
+```bash
+POST /api/trips/plan/natural
 ```
 
-If the SDK fails, the server **falls back to the mock planner**.
+**Request:**
+```json
+{
+  "prompt": "Plan a 3-day Jaipur trip for 2 people from March 1-5, 2024. We enjoy museums, local cuisine, and shopping. Keep it moderate pace."
+}
+```
 
-## Project structure
+**Response:**
+```json
+{
+  "request": {
+    "destination": "Jaipur, India",
+    "startDate": "2024-03-01",
+    "endDate": "2024-03-05",
+    "interests": ["museums", "local cuisine", "shopping"],
+    "travelers": 2,
+    "pace": "moderate"
+  },
+  "plan": {
+    "destination": { ... },
+    "days": [
+      {
+        "date": "2024-03-01",
+        "blocks": [
+          {
+            "start": "09:00",
+            "end": "12:00",
+            "type": "sightseeing",
+            "title": "City Palace Museum",
+            "partner": true,
+            "provider": "Heritage Tours"
+          }
+        ]
+      }
+    ],
+    "partnerPlacements": [...]
+  }
+}
+```
+
+### Streaming Support
+Add `Accept: text/event-stream` header for real-time progress updates:
+
+```bash
+curl -X POST http://localhost:8081/api/trips/plan/natural \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"prompt": "3-day Jaipur trip for 2"}'
+```
+
+### View Destination Catalog
+```bash
+GET /api/catalog/:destination
+```
+
+**Example:**
+```bash
+GET /api/catalog/Jaipur%2C%20India
+```
+
+**Response:**
+```json
+{
+  "destination": { ... },
+  "restaurants": [...],
+  "activities": [...],
+  "cabs": [...],
+  "games": [...],
+  "pois": [...]
+}
+```
+
+### List Available Models
+```bash
+GET /api/models
+```
+
+**Response:**
+```json
+{
+  "count": 5,
+  "models": [
+    {
+      "id": "gpt-4o-mini",
+      "object": "model",
+      "created": 1234567890
+    }
+  ]
+}
+```
+
+## 🧪 Example Usage
+
+### cURL
+```bash
+curl -X POST http://localhost:8081/api/trips/plan/natural \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "I want to visit Jaipur from March 1-5, 2024 with my spouse. We enjoy museums, local cuisine, and shopping. Keep it moderate pace."
+  }'
+```
+
+### JavaScript/Node.js
+```javascript
+const response = await fetch('http://localhost:8081/api/trips/plan/natural', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    prompt: "Plan a romantic 2-day Delhi trip for couples, budget-friendly"
+  })
+});
+
+const { request, plan } = await response.json();
+console.log(`Planning ${plan.days.length} days in ${plan.destination.name}`);
+```
+
+### Python
+```python
+import requests
+
+response = requests.post('http://localhost:8081/api/trips/plan/natural', 
+  json={
+    "prompt": "Adventure trip to Rajasthan for 4 days, love photography and local culture"
+  }
+)
+
+data = response.json()
+print(f"Trip plan: {len(data['plan']['days'])} days")
+```
+
+## 🗂️ Project Structure
 
 ```
 trip-planner-server/
-  data/           # mock partners & POIs
-  src/
-    index.ts      # Express app
-    routes/
-    schemas/
-    services/
-      planner.mock.ts
-      planner.cursor.ts
-      planner.service.ts
-      nlp-parser.ai.ts
-      nlp-parser.keywords.ts
-      catalog.service.ts
-    mcp/
-      catalog-server.ts
+├── data/                     # Partner and destination data
+│   ├── destinations.json     # Supported destinations
+│   ├── partners.restaurants.json
+│   ├── partners.activities.json
+│   ├── partners.cabs.json
+│   └── pois.jaipur.json     # Points of interest
+├── src/
+│   ├── index.ts             # Express server
+│   ├── routes/              # API route handlers
+│   ├── services/            # Business logic
+│   ├── schemas/             # Data validation schemas
+│   ├── utils/               # Helper utilities
+│   └── mcp/                 # MCP server for AI tools
+└── .env                     # Environment configuration
+```
+
+## 🔧 Features
+
+- **AI-Powered Planning**: Uses OpenAI GPT models for intelligent trip generation
+- **Partner Integration**: Real restaurant, activity, and transportation recommendations
+- **Natural Language Processing**: Plain English trip requests
+- **Streaming Responses**: Real-time progress updates
+- **Caching Layer**: Optimized performance with in-memory caching
+- **MCP Protocol**: Model Context Protocol for AI tool integration
+- **Flexible Data**: JSON-based partner and destination catalogs
+
+## 🚨 Error Handling
+
+The API returns standard HTTP status codes:
+
+- `200` - Success
+- `400` - Bad Request (validation errors)
+- `500` - Internal Server Error
+
+**Error Response Format:**
+```json
+{
+  "error": "Validation failed",
+  "details": { ... }
+}
 ```
