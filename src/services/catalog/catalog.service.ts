@@ -91,9 +91,18 @@ export async function resolveDestination(
   destination: string
 ): Promise<DestinationMeta | undefined> {
   const destinations = await loadDestinations();
+  const destLower = destination.toLowerCase();
+  
   return (
-    destinations.find((d) => d.name.toLowerCase() === destination.toLowerCase()) ??
-    destinations.find((d) => destination.toLowerCase().includes(d.key))
+    // Exact match first
+    destinations.find((d) => d.name.toLowerCase() === destLower) ??
+    // Partial match by key
+    destinations.find((d) => destLower.includes(d.key)) ??
+    // Partial match by city name (handle cases like "New York City" vs "New York City, USA")
+    destinations.find((d) => {
+      const cityName = d.name.split(',')[0]?.trim().toLowerCase();
+      return cityName === destLower || destLower.includes(cityName || '');
+    })
   );
 }
 
