@@ -91,7 +91,7 @@ export async function runOpenAiPromptWithMcp(prompt: string): Promise<string> {
       "OPENAI_API_KEY is required. Set it in .env (see .env.example).",
     );
   }
-
+console.log(`[openai-mcp] Starting OpenAI client`);
   const client = new OpenAI({
     apiKey,
     baseURL,
@@ -125,6 +125,7 @@ export async function runOpenAiPromptWithMcp(prompt: string): Promise<string> {
       tool_choice: iteration === 1 && tools ? "auto" : undefined,
     });
 
+    console.log(`[openai-mcp] Iteration ${iteration} completed ${completion.choices[0]?.message?.content?.trim()}`);
     const message = completion.choices[0]?.message;
     if (!message) {
       throw new Error("OpenAI returned no message");
