@@ -131,38 +131,38 @@ server.registerTool(
     jsonText(await loadPartnerGames(normalizeCityInput(destination, city)))
 );
 
-// server.registerTool(
-//   "get_catalog_bundle",
-//   {
-//     description:
-//       "All partner lists (cabs, restaurants, activities, games) for a destination. Does not include POIs.",
-//     inputSchema: z.object({
-//       destination: z.string().describe('e.g. "Jaipur, India"'),
-//     }),
-//   },
-//   async ({ destination }) => {
-//     const dest = await resolveDestination(destination);
-//     if (!dest) {
-//       return {
-//         content: [
-//           {
-//             type: "text",
-//             text: `Destination not in catalog: ${destination}. Call list_destinations for supported keys.`,
-//           },
-//         ],
-//         isError: true,
-//       };
-//     }
-//     const city = normalizeCityInput(destination);
-//     const [cabs, restaurants, activities, games] = await Promise.all([
-//       loadPartnerCabs(city),
-//       loadPartnerRestaurants(city),
-//       loadPartnerActivities(city),
-//       loadPartnerGames(city),
-//     ]);
-//     return jsonText({ destination: dest, cabs, restaurants, activities, games });
-//   }
-// );
+server.registerTool(
+  "get_catalog_bundle",
+  {
+    description:
+      "All partner lists (cabs, restaurants, activities, games) for a destination. Does not include POIs.",
+    inputSchema: z.object({
+      destination: z.string().describe('e.g. "Jaipur, India"'),
+    }),
+  },
+  async ({ destination }) => {
+    const dest = await resolveDestination(destination);
+    if (!dest) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Destination not in catalog: ${destination}. Call list_destinations for supported keys.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+    const city = normalizeCityInput(destination);
+    const [cabs, restaurants, activities, games] = await Promise.all([
+      loadPartnerCabs(city),
+      loadPartnerRestaurants(city),
+      loadPartnerActivities(city),
+      loadPartnerGames(city),
+    ]);
+    return jsonText({ destination: dest, cabs, restaurants, activities, games });
+  }
+);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

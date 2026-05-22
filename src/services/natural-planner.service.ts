@@ -17,7 +17,7 @@ import {
   validatePartnerInPlan,
   getPartnerValidationSummary 
 } from "./partner-validation.service.js";
-
+import { loadUserProfiles } from "./catalog/catalog.service.js";
 /**
  * Validate and enrich partner information in the new schema format
  */
@@ -85,7 +85,7 @@ function buildNaturalPlanPrompt(
   const keywordHint =
     suggestedKeywords.length > 0 ? suggestedKeywords.join(", ") : "(none)";
 
-    // ARIA: User Profile Personalization Integration
+  // ARIA: User Profile Personalization Integration
   // If a user profile is provided, inject it into the AI prompt with strong constraints.
   // This makes the AI consider dietary restrictions, accessibility, budget, travel style,
   // and preferences (crowds, local experiences, fitness level) when generating the plan.
@@ -113,7 +113,9 @@ CRITICAL INSTRUCTIONS:
   const catalogHint = isCatalogMcpEnabled()
     ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use realistic provider names."
     : "";
-  return `Parse the user message and build a complete trip schedule.${catalogHint} Reply with JSON only — no markdown.
+
+
+  return `Parse the user message and build a complete trip schedule.${catalogHint} ${profileContext} Reply with JSON only — no markdown.
 
 Schema:
 {
@@ -175,6 +177,8 @@ IMPORTANT RULES:
 - ALWAYS set "plannerMode": "openai" in the root response object
 - Generate realistic, detailed data for all activity fields
 - Use proper 12-hour time format (e.g., "10:00 AM", "2:30 PM")
+- IMPORTANT: Include cab transfers, some partner meals, interest-matched POIs, games when relevant
+- IMPORTANT: Time-based schedule 08:30-22:00 with 15-30 min buffers
 - For restaurants: include cuisineType (Italian, American, etc.)
 - For attractions/museums: set cuisineType to null
 - Create unique IDs using format: citycode-type-descriptive-name
@@ -224,6 +228,7 @@ ${prompt}`;
  */
 export async function planFromNaturalLanguage(
   prompt: string,
+  userId?: string,
 ): Promise<any> {
   const destinations = await loadDestinations();
   const suggestedKeywords = extractPromptKeywords(prompt);
@@ -260,7 +265,7 @@ export async function planFromNaturalLanguage(
     
     // Validate and enrich partner information
     const validatedResult = await validateAndEnrichNewSchemaPartners(result);
-    
+    // TODO: link integration
     return validatedResult;
 
   } catch (err) {
