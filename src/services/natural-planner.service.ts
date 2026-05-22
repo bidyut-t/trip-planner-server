@@ -5,6 +5,7 @@ import type { UserProfile } from "../schemas/user-profile.schema.js";
 import {
   loadCatalog,
   loadDestinations,
+  loadUserProfiles,
   type DestinationMeta,
 } from "./catalog/catalog.service.js";
 import { extractPromptKeywords } from "./nlp/nlp-parser.keywords.js";
@@ -17,7 +18,7 @@ import {
   validatePartnerInPlan,
   getPartnerValidationSummary 
 } from "./partner-validation.service.js";
-import { loadUserProfiles } from "./catalog/catalog.service.js";
+import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 /**
  * Validate and enrich partner information in the new schema format
  */
@@ -191,7 +192,9 @@ Schema:
         "amenities": string[] (facilities/features),
         "reviewSnippet": string (sample review),
         "distance": string (e.g., "0.8 mi"),
-        "walkingTime": string (e.g., "15 min")
+        "walkingTime": string (e.g., "15 min"),
+        "latitude": number (latitude coordinate for map links),
+        "longitude": number (longitude coordinate for map links)
       }
     }]
   }]
@@ -237,6 +240,8 @@ IMPORTANT RULES:
 - For non-partner activities: create realistic business names
 - For partner blocks: set isPartner=true, provider=exact name from MCP data, source="partner", addFromOurRecommendation=true
 - For non-partner blocks: set isPartner=false, source="suggested", addFromOurRecommendation=false
+- IMPORTANT: Include realistic latitude and longitude coordinates for each activity (use actual coordinates for the city)
+- Example coordinates for NYC: Times Square (40.7580, -73.9855), Central Park (40.7829, -73.9654), Museum Mile (40.7794, -73.9632)
 
 Infer destination, dates (today is ${today}), travelers, pace, and interests from the message.
 Keyword hints: ${keywordHint}
@@ -317,8 +322,12 @@ export async function planFromNaturalLanguage(
     
     // Validate and enrich partner information
     const validatedResult = await validateAndEnrichNewSchemaPartners(result);
-    // TODO: link integration
-    return validatedResult;
+    
+    // ARIA: Programmatic map link generation (Feature 1 - CodeFest)
+    // Add per-day Google Maps links if user requested map in their prompt
+    const resultWithMapLinks = addMapLinksToTripPlan(validatedResult, userWantsMap);
+    
+    return resultWithMapLinks;
 
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
