@@ -1,0 +1,72 @@
+[
+  {
+    "id": "user-001",
+    "name": "Anesh",
+    "bonvoyMemberNumber": "123456789",
+    "dietaryRestrictions": ["vegetarian", "no dairy"],
+    "accessibilityNeeds": ["wheelchair accessible"],
+    "budgetLevel": "moderate",
+    "travelStyle": "cultural",
+    "preferences": {
+      "avoidCrowds": true,
+      "preferLocalExperiences": true,
+      "fitnessLevel": "moderate"
+    }
+  },
+  {
+    "id": "user-002",
+    "name": "Devesh",
+    "bonvoyMemberNumber": "234567890",
+    "dietaryRestrictions": [],
+    "accessibilityNeeds": [],
+    "budgetLevel": "luxury",
+    "travelStyle": "foodie",
+    "preferences": {
+      "avoidCrowds": false,
+      "preferLocalExperiences": true,
+      "fitnessLevel": "high"
+    }
+  },
+  {
+    "id": "user-003",
+    "name": "Bidyut",
+    "bonvoyMemberNumber": "345678901",
+    "dietaryRestrictions": ["pescatarian"],
+    "accessibilityNeeds": [],
+    "budgetLevel": "moderate",
+    "travelStyle": "mixed",
+    "preferences": {
+      "avoidCrowds": false,
+      "preferLocalExperiences": false,
+      "fitnessLevel": "moderate"
+    }
+  },
+  {
+    "id": "user-004",
+    "name": "Tarun",
+    "bonvoyMemberNumber": "456789012",
+    "dietaryRestrictions": ["vegan"],
+    "accessibilityNeeds": [],
+    "budgetLevel": "budget",
+    "travelStyle": "adventure",
+    "preferences": {
+      "avoidCrowds": true,
+      "preferLocalExperiences": true,
+      "fitnessLevel": "high"
+    }
+  },
+  {
+    "id": "user-005",
+    "name": "Sree Kanth",
+    "bonvoyMemberNumber": "567890123",
+    "dietaryRestrictions": ["gluten-free"],
+    "accessibilityNeeds": ["hearing impaired - visual aids helpful"],
+    "budgetLevel": "moderate",
+    "travelStyle": "relaxation",
+    "preferences": {
+      "avoidCrowds": true,
+      "preferLocalExperiences": false,
+      "fitnessLevel": "low"
+    }
+  }
+]
