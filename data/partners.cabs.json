@@ -9,8 +9,8 @@
   },
   {
     "id": "cab-2",
-    "name": "YourCab Premium",
-    "city": "Jaipur",
+    "name": "Uber Premium",
+    "city": "New York City",
     "tags": ["city", "evening", "luxury"],
     "durationMinutes": 30,
     "priority": 8
