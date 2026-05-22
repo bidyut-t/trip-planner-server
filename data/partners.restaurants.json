@@ -38,5 +38,25 @@
     "priority": 6,
     "latitude": 26.9848,
     "longitude": 75.8502
+  },
+  {
+    "id": "rest-nyc-1",
+    "name": "Asiate at Mandarin Oriental",
+    "city": "New York City",
+    "tags": ["fine-dining", "contemporary-asian", "dinner", "upscale"],
+    "durationMinutes": 120,
+    "priority": 9,
+    "latitude": 40.7681,
+    "longitude": -73.9819
+  },
+  {
+    "id": "rest-nyc-2",
+    "name": "Joe's Pizza - Greenwich Village",
+    "city": "New York City",
+    "tags": ["pizza", "quick-service", "lunch", "casual"],
+    "durationMinutes": 30,
+    "priority": 10,
+    "latitude": 40.7295,
+    "longitude": -74.0024
   }
 ]

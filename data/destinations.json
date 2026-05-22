@@ -12,5 +12,19 @@
       "Bargaining is common in local bazaars."
     ],
     "poiFile": "pois.jaipur.json"
+  },
+  {
+    "key": "new_york",
+    "name": "New York City, USA",
+    "timezone": "America/New_York",
+    "latitude": 40.7128,
+    "longitude": -74.006,
+    "summary": "The Big Apple - iconic skyline, world-class attractions, Broadway shows, and diverse neighborhoods.",
+    "tips": [
+      "Use subway for efficient transportation; get a MetroCard or OMNY.",
+      "Book Broadway shows and popular restaurants in advance.",
+      "Walk or use Uber/taxi for short distances in Manhattan."
+    ],
+    "poiFile": "pois.new_york.json"
   }
 ]
