@@ -1,4 +1,18 @@
 import { z } from "zod";
+import { normalizeBlockType, normalizeSource } from "../utils/normalize-llm-output.js";
+
+const planBlockTypeSchema = z.preprocess(
+  normalizeBlockType,
+  z.enum([
+    "cab",
+    "sightseeing",
+    "restaurant",
+    "activity",
+    "game",
+    "free",
+    "travel",
+  ])
+);
 
 export const planTripRequestSchema = z.object({
   destination: z.string().min(1),
@@ -11,25 +25,28 @@ export const planTripRequestSchema = z.object({
 
 export type PlanTripRequest = z.infer<typeof planTripRequestSchema>;
 
+export const planTripNaturalRequestSchema = z.object({
+  prompt: z.string().min(3).max(2000),
+});
+
+export type PlanTripNaturalRequest = z.infer<typeof planTripNaturalRequestSchema>;
+
 export const planBlockSchema = z.object({
   start: z.string(),
   end: z.string(),
-  type: z.enum([
-    "cab",
-    "sightseeing",
-    "restaurant",
-    "activity",
-    "game",
-    "free",
-    "travel",
-  ]),
+  type: planBlockTypeSchema,
   title: z.string(),
   partner: z.boolean().optional(),
   provider: z.string().optional(),
-  source: z.enum(["poi", "partner", "suggested"]).optional(),
+  source: z.preprocess(normalizeSource, z.enum(["poi", "partner", "suggested"])).optional(),
   matchedInterest: z.string().optional(),
   notes: z.string().optional(),
-  addFromOurRecommendation: z.boolean(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  addFromOurRecommendation: z.preprocess(
+    (v) => (typeof v === "boolean" ? v : false),
+    z.boolean()
+  ),
 });
 
 export const dayPlanSchema = z.object({
@@ -57,8 +74,15 @@ export const tripPlanSchema = z.object({
   interests: z.array(z.string()),
   days: z.array(dayPlanSchema),
   partnerPlacements: z.array(partnerPlacementSchema),
-  plannerMode: z.enum(["mock", "cursor"]),
+  plannerMode: z.enum(["mock", "openai"]),
 });
 
 export type TripPlan = z.infer<typeof tripPlanSchema>;
 export type PlanBlock = z.infer<typeof planBlockSchema>;
+
+export const planTripNaturalResponseSchema = z.object({
+  request: planTripRequestSchema,
+  plan: tripPlanSchema,
+});
+
+export type PlanTripNaturalResponse = z.infer<typeof planTripNaturalResponseSchema>;

@@ -1,8 +1,8 @@
 import express from "express";
 import { modelsRouter } from "./routes/models.routes.js";
 import { tripRouter } from "./routes/trip.routes.js";
-import { loadCatalog } from "./services/catalog.service.js";
-import { isCursorSdkEnabled } from "./utils/env.js";
+import { loadCatalog } from "./services/catalog/catalog.service.js";
+import { isOpenAiSdkEnabled } from "./utils/env.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 8081;
@@ -12,7 +12,7 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.json({
     ok: true,
-    plannerMode: isCursorSdkEnabled() ? "cursor" : "mock",
+    plannerMode: isOpenAiSdkEnabled() ? "openai" : "mock",
   });
 });
 
@@ -32,5 +32,5 @@ app.use("/api/trips", tripRouter);
 
 app.listen(port, () => {
   console.log(`Trip planner server listening on http://localhost:${port}`);
-  console.log(`Planner mode: ${isCursorSdkEnabled() ? "cursor" : "mock"}`);
+  console.log(`Planner mode: ${isOpenAiSdkEnabled() ? "openai" : "mock"}`);
 });

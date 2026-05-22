@@ -1,0 +1,18 @@
+[
+  {
+    "id": "poi-nyc-1",
+    "name": "Empire State Building",
+    "tags": ["history", "photography", "architecture", "observation"],
+    "durationMinutes": 120,
+    "latitude": 40.7484,
+    "longitude": -73.9857
+  },
+  {
+    "id": "poi-nyc-2",
+    "name": "Top of the Rock - Rockefeller Center",
+    "tags": ["photography", "observation", "skyline"],
+    "durationMinutes": 90,
+    "latitude": 40.7587,
+    "longitude": -73.9787
+  }
+]

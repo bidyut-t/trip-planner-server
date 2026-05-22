@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { listAvailableModels } from "../services/cursor-models.service.js";
+import { listAvailableModels } from "../services/models/openai-models.service.js";
 
 export const modelsRouter = Router();
 
@@ -8,7 +8,7 @@ modelsRouter.get("/", async (_req, res) => {
     const models = await listAvailableModels();
     res.json({ count: models.length, models });
   } catch (err) {
-    if (err instanceof Error && err.message.includes("CURSOR_API_KEY")) {
+    if (err instanceof Error && err.message.includes("OPENAI_API_KEY")) {
       res.status(400).json({ error: err.message });
       return;
     }

@@ -1,5 +1,5 @@
 import type { PlanTripRequest, TripPlan, PlanBlock } from "../schemas/trip-plan.schema.js";
-import type { CatalogBundle, PoiItem, PartnerItem } from "./catalog.service.js";
+import type { CatalogBundle, PoiItem, PartnerItem } from "./catalog/catalog.service.js";
 import { eachDay, addMinutes } from "../utils/dates.js";
 
 function block(

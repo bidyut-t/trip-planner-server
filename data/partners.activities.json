@@ -1,18 +1,62 @@
 [
   {
     "id": "act-1",
-    "name": "Partner Heritage Walk",
+    "name": "Heritage Textiles Workshop",
     "city": "Jaipur",
-    "tags": ["history", "walking", "culture"],
+    "tags": ["shopping", "culture", "textiles", "workshop"],
     "durationMinutes": 120,
-    "priority": 8
+    "priority": 8,
+    "latitude": 26.9124,
+    "longitude": 75.7873
   },
   {
     "id": "act-2",
-    "name": "Partner Cooking Class",
+    "name": "Cooking Class: Rajasthani Cuisine",
     "city": "Jaipur",
-    "tags": ["food", "culture"],
+    "tags": ["food", "culture", "cooking", "experience"],
     "durationMinutes": 150,
-    "priority": 6
+    "priority": 7,
+    "latitude": 26.9134,
+    "longitude": 75.7992
+  },
+  {
+    "id": "act-3",
+    "name": "Amber Fort Exploration",
+    "city": "Jaipur",
+    "tags": ["history", "fort", "sightseeing", "heritage"],
+    "durationMinutes": 180,
+    "priority": 9,
+    "latitude": 26.9855,
+    "longitude": 75.8513
+  },
+  {
+    "id": "act-nyc-1",
+    "name": "Empire State Building & Top of the Rock Tour",
+    "city": "New York City",
+    "tags": ["attraction", "observation", "skyline", "tour"],
+    "durationMinutes": 240,
+    "priority": 10,
+    "latitude": 40.7484,
+    "longitude": -73.9857
+  },
+  {
+    "id": "act-nyc-2",
+    "name": "New York in One Day Guided Sightseeing Tour",
+    "city": "New York City",
+    "tags": ["activity", "tour", "sightseeing", "comprehensive"],
+    "durationMinutes": 360,
+    "priority": 9,
+    "latitude": 40.758,
+    "longitude": -73.9855
+  },
+  {
+    "id": "act-nyc-3",
+    "name": "Chinatown & Little Italy Food Tour",
+    "city": "New York City",
+    "tags": ["food", "culture", "tour", "tasting"],
+    "durationMinutes": 180,
+    "priority": 8,
+    "latitude": 40.7157,
+    "longitude": -73.9977
   }
 ]

@@ -1,18 +1,62 @@
 [
   {
     "id": "rest-1",
-    "name": "Partner Spice House",
+    "name": "Spice Court Restaurant",
     "city": "Jaipur",
     "tags": ["lunch", "dinner", "food", "rajasthani"],
     "durationMinutes": 90,
-    "priority": 10
+    "priority": 10,
+    "latitude": 26.9167,
+    "longitude": 75.812
   },
   {
     "id": "rest-2",
-    "name": "Partner Rooftop Grill",
+    "name": "Peacock Rooftop Restaurant",
     "city": "Jaipur",
-    "tags": ["dinner", "food", "evening"],
+    "tags": ["dinner", "food", "evening", "rooftop"],
     "durationMinutes": 75,
-    "priority": 7
+    "priority": 9,
+    "latitude": 26.927,
+    "longitude": 75.823
+  },
+  {
+    "id": "rest-3",
+    "name": "Handi Restaurant",
+    "city": "Jaipur",
+    "tags": ["dinner", "food", "traditional", "rajasthani"],
+    "durationMinutes": 80,
+    "priority": 8,
+    "latitude": 26.9124,
+    "longitude": 75.7873
+  },
+  {
+    "id": "rest-4",
+    "name": "Amber Café",
+    "city": "Jaipur",
+    "tags": ["lunch", "breakfast", "coffee", "light"],
+    "durationMinutes": 60,
+    "priority": 6,
+    "latitude": 26.9848,
+    "longitude": 75.8502
+  },
+  {
+    "id": "rest-nyc-1",
+    "name": "Asiate at Mandarin Oriental",
+    "city": "New York City",
+    "tags": ["fine-dining", "contemporary-asian", "dinner", "upscale"],
+    "durationMinutes": 120,
+    "priority": 9,
+    "latitude": 40.7681,
+    "longitude": -73.9819
+  },
+  {
+    "id": "rest-nyc-2",
+    "name": "Joe's Pizza - Greenwich Village",
+    "city": "New York City",
+    "tags": ["pizza", "quick-service", "lunch", "casual"],
+    "durationMinutes": 30,
+    "priority": 10,
+    "latitude": 40.7295,
+    "longitude": -74.0024
   }
 ]
