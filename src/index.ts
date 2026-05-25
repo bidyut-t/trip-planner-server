@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import { modelsRouter } from "./routes/models.routes.js";
 import { tripRouter } from "./routes/trip.routes.js";
 import { loadCatalog } from "./services/catalog/catalog.service.js";
@@ -6,6 +7,14 @@ import { isOpenAiSdkEnabled } from "./utils/env.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 8081;
+const frontendBaseUrl = process.env.FRONTEND_BASE_URL || "http://localhost:3002";
+
+app.use(cors({
+  origin: frontendBaseUrl,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
 
 app.use(express.json());
 
@@ -33,4 +42,5 @@ app.use("/api/trips", tripRouter);
 app.listen(port, () => {
   console.log(`Trip planner server listening on http://localhost:${port}`);
   console.log(`Planner mode: ${isOpenAiSdkEnabled() ? "openai" : "mock"}`);
+  console.log(`CORS enabled for: ${frontendBaseUrl}`);
 });
