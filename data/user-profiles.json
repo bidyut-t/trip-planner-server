@@ -1,25 +1,25 @@
 [
   {
     "id": "user-001",
-    "name": "Anesh",
+    "name": "Maverick",
     "bonvoyMemberNumber": "123456789",
-    "dietaryRestrictions": ["vegetarian", "no dairy"],
-    "accessibilityNeeds": ["wheelchair accessible"],
-    "budgetLevel": "moderate",
-    "travelStyle": "cultural",
+    "dietaryRestrictions": ["high-protein", "no sugar"],
+    "accessibilityNeeds": [],
+    "budgetLevel": "luxury",
+    "travelStyle": "adventure",
     "preferences": {
-      "avoidCrowds": true,
+      "avoidCrowds": false,
       "preferLocalExperiences": true,
-      "fitnessLevel": "moderate"
+      "fitnessLevel": "high"
     }
   },
   {
     "id": "user-002",
-    "name": "Devesh",
+    "name": "Goose",
     "bonvoyMemberNumber": "234567890",
     "dietaryRestrictions": [],
     "accessibilityNeeds": [],
-    "budgetLevel": "luxury",
+    "budgetLevel": "moderate",
     "travelStyle": "foodie",
     "preferences": {
       "avoidCrowds": false,
@@ -29,7 +29,7 @@
   },
   {
     "id": "user-003",
-    "name": "Bidyut",
+    "name": "Emily",
     "bonvoyMemberNumber": "345678901",
     "dietaryRestrictions": ["pescatarian"],
     "accessibilityNeeds": [],
@@ -43,7 +43,7 @@
   },
   {
     "id": "user-004",
-    "name": "Tarun",
+    "name": "Sarah",
     "bonvoyMemberNumber": "456789012",
     "dietaryRestrictions": ["vegan"],
     "accessibilityNeeds": [],
@@ -57,7 +57,7 @@
   },
   {
     "id": "user-005",
-    "name": "Sree Kanth",
+    "name": "Taylor",
     "bonvoyMemberNumber": "567890123",
     "dietaryRestrictions": ["gluten-free"],
     "accessibilityNeeds": ["hearing impaired - visual aids helpful"],

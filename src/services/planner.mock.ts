@@ -165,7 +165,7 @@ export function planTripMock(input: PlanTripRequest, catalog: CatalogBundle): Tr
       trackPartner(game.name, "game");
     }
 
-    return { date, blocks };
+    return { date, blocks, mapLink: undefined }; // ARIA: Added mapLink for consistency
   });
 
   return {
@@ -184,6 +184,5 @@ export function planTripMock(input: PlanTripRequest, catalog: CatalogBundle): Tr
       return { service: name, category: v.category, count: v.count };
     }),
     plannerMode: "mock",
-    mapLink: undefined,
   };
 }

@@ -95,8 +95,9 @@ export type PlanTripNaturalResponse = z.infer<typeof planTripNaturalResponseSche
 // ARIA: Conversational refinement request schema for iterative plan modifications
 // Allows users to refine existing plans with natural language feedback
 // Example: "I'll be with my mom, adjust for accessibility" or "Add kid-friendly activities"
+// UPDATED: Using z.any() for originalPlan to support new schema format (activities instead of blocks)
 export const refinePlanRequestSchema = z.object({
-  originalPlan: tripPlanSchema,  // ARIA: Full plan object to be refined
+  originalPlan: z.any(),  // ARIA: Full plan object to be refined (new schema format)
   feedback: z.string().min(3).max(1000),  // ARIA: Natural language modification request
   userId: z.string().optional(),  // ARIA: Optional user ID to maintain profile context
 });
