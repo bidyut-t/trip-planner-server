@@ -22,17 +22,31 @@ function handlePlanError(err: unknown, res: import("express").Response): void {
   res.status(500).json({ error: "Internal server error" });
 }
 
+// Unified endpoint for both new trip planning and conversational refinement
+// If previousPlan is provided, it refines the existing plan with the prompt as feedback
+// If previousPlan is missing, it generates a new trip plan from the prompt
 tripRouter.post("/plan/natural", async (req, res) => {
   try {
-    const { prompt, userId } = planTripNaturalRequestSchema.parse(req.body);
-    const result = await planFromNaturalLanguage(prompt, userId);  // ARIA: Pass userId for profile selection
+    const { prompt, userId, previousPlan } = planTripNaturalRequestSchema.parse(req.body);
+    
+    let result;
+    if (previousPlan) {
+      // Refinement mode: user is modifying existing plan
+      console.log("[unified-endpoint] Refinement mode - updating existing plan");
+      result = await refinePlanFromFeedback(previousPlan, prompt, userId);
+    } else {
+      // New plan mode: user is requesting a new trip
+      console.log("[unified-endpoint] New plan mode - generating fresh itinerary");
+      result = await planFromNaturalLanguage(prompt, userId);
+    }
+    
     res.json(result);
   } catch (err) {
     handlePlanError(err, res);
   }
 });
 
-// ARIA: Get all user profiles for demo/testing
+// Get all user profiles for demo/testing
 tripRouter.get("/profiles", async (_req, res) => {
   try {
     const profiles = await loadUserProfiles();
@@ -44,7 +58,7 @@ tripRouter.get("/profiles", async (_req, res) => {
   }
 });
 
-// ARIA: Get specific user profile by ID
+// Get specific user profile by ID
 tripRouter.get("/profiles/:userId", async (req, res) => {
   try {
     const profile = await getUserProfile(req.params.userId);
@@ -60,11 +74,13 @@ tripRouter.get("/profiles/:userId", async (req, res) => {
   }
 });
 
-// ARIA: Conversational Plan Refinement endpoint (Feature 3 - CodeFest)
+// Conversational Plan Refinement endpoint (CodeFest Feature)
 // Allows users to iteratively refine trip plans with natural language feedback
 // Example: "I'll be with my mom, adjust for accessibility" or "Add kid-friendly activities"
+// DEPRECATED: Use POST /plan/natural with previousPlan field instead for unified API
 tripRouter.post("/plan/refine", async (req, res) => {
   try {
+    console.warn("[DEPRECATED] /plan/refine endpoint - use /plan/natural with previousPlan instead");
     const { originalPlan, feedback, userId } = refinePlanRequestSchema.parse(req.body);
     const refinedPlan = await refinePlanFromFeedback(originalPlan, feedback, userId);
     res.json({ plan: refinedPlan });

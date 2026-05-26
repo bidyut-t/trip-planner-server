@@ -75,7 +75,7 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
 
 
 /**
- * ARIA: Build the AI prompt for natural language trip planning with optional personalization
+ * Build the AI prompt for natural language trip planning with optional personalization
  * 
  * Constructs the complete prompt sent to the AI, including:
  * - Available destinations and keywords
@@ -110,7 +110,7 @@ function buildNaturalPlanPrompt(
   const keywordHint =
     suggestedKeywords.length > 0 ? suggestedKeywords.join(", ") : "(none)";
 
-  // ARIA: User Profile Personalization Integration
+  // User Profile Personalization Integration
   // If a user profile is provided, inject it into the AI prompt with strong constraints.
   // This makes the AI consider dietary restrictions, accessibility, budget, travel style,
   // and preferences (crowds, local experiences, fitness level) when generating the plan.
@@ -263,11 +263,11 @@ ${prompt}`;
 /**
  * Natural language: ONE AI call (parse + plan). Catalog partner data via MCP tools, not local enrich.
  * 
- * ARIA: Enhanced with keyword detection and programmatic map link generation.
+ * Enhanced with keyword detection and programmatic map link generation.
  * Detects if user wants map links (keywords: map, link, route, directions, google maps).
  * AI generates coordinates, then custom utility function builds clean per-day URLs.
  * 
- * ARIA: Enhanced with user profile personalization (Feature 2 - CodeFest).
+ * Enhanced with user profile personalization for CodeFest.
  * When a userId is provided, loads the corresponding user profile from data/user-profiles.json
  * and injects it into the AI prompt for personalized trip planning. The AI will:
  * - Filter restaurants by dietary restrictions (vegetarian, vegan, gluten-free, etc.)
@@ -290,16 +290,27 @@ export async function planFromNaturalLanguage(
   const destinations = await loadDestinations();
   const suggestedKeywords = extractPromptKeywords(prompt);
 
-  // ARIA: Load user profile ONLY if userId is explicitly provided
+  // Load user profile if userId is explicitly provided
   // No profile personalization applied by default - keeps plans generic
   // In production, this would be based on authenticated user session
   let userProfile: UserProfile | undefined;
   if (userId) {
     const userProfiles = await loadUserProfiles();
     userProfile = userProfiles.find(p => p.id === userId);
+    console.log('[natural-planner] User profile loaded:', userProfile ? `${userProfile.name} (${userId})` : 'NOT FOUND');
+    if (userProfile) {
+      console.log('[natural-planner] Profile details:', {
+        travelStyle: userProfile.travelStyle,
+        budgetLevel: userProfile.budgetLevel,
+        fitnessLevel: userProfile.preferences.fitnessLevel,
+        dietaryRestrictions: userProfile.dietaryRestrictions,
+      });
+    }
+  } else {
+    console.log('[natural-planner] No userId provided - generating generic plan');
   }
 
-  // ARIA: Keyword detection for map link generation
+  // Keyword detection for map link generation
   // Check if user wants map links (only generates if explicitly requested)
   const lowerPrompt = prompt.toLowerCase();
   const userWantsMap = lowerPrompt.includes("map") || 
@@ -313,8 +324,13 @@ export async function planFromNaturalLanguage(
       prompt,
       destinations,
       suggestedKeywords,
-      userProfile,  // ARIA: Pass user profile for personalized planning
+      userProfile,  // Pass user profile for personalized planning
     );
+    
+    if (userProfile) {
+      console.log('[natural-planner] Using personalized prompt for:', userProfile.name);
+    }
+    
     const raw = await runOpenAiPrompt(naturalPlanPrompt);
     
     // AI returns the new schema directly - parse and validate partners
@@ -323,7 +339,7 @@ export async function planFromNaturalLanguage(
     // Validate and enrich partner information
     const validatedResult = await validateAndEnrichNewSchemaPartners(result);
     
-    // ARIA: Programmatic map link generation (Feature 1 - CodeFest)
+    // Programmatic map link generation (CodeFest Feature)
     // Add per-day Google Maps links if user requested map in their prompt
     const resultWithMapLinks = addMapLinksToTripPlan(validatedResult, userWantsMap);
     

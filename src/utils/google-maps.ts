@@ -1,5 +1,5 @@
 /**
- * ARIA: Google Maps Link Generation Utility
+ * Google Maps Link Generation Utility
  * 
  * This utility generates clean Google Maps direction links per day.
  * Filters out cab/travel blocks and duplicate coordinates to avoid messy loops.
@@ -13,7 +13,7 @@
 /**
  * Generate a Google Maps directions link for a single day's locations
  * 
- * ARIA: Filters out transport activities and removes duplicate consecutive
+ * Filters out transport activities and removes duplicate consecutive
  * coordinates to create clean routes with only actual destinations
  * 
  * UPDATED: Works with new schema where each day has activities[] with nested activity.latitude/longitude
@@ -66,7 +66,7 @@ function generateDayMapLink(activities: any[]): string | undefined {
 /**
  * Add map links to each day in the trip plan if user requested them
  * 
- * ARIA: Main integration point - called after AI generates the plan.
+ * Main integration point - called after AI generates the plan.
  * Uses keyword detection to determine if user wants map links.
  * Programmatically generates one clean Google Maps URL per day.
  * 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * ARIA: User profile schema for personalized trip planning
+ * User profile schema for personalized trip planning
  * 
  * Follows the same pattern as partner data (JSON file + TypeScript types).
  * Profiles include dietary restrictions, accessibility needs, budget level,
@@ -25,7 +25,7 @@ export interface UserProfile {
   };
 }
 
-// ARIA: Zod schema for runtime validation and type safety
+// Zod schema for runtime validation and type safety
 export const userProfileSchema = z.object({
   id: z.string(),
   name: z.string(),

@@ -13,7 +13,7 @@ import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 import { loadUserProfiles } from "./catalog/catalog.service.js";
 
 /**
- * ARIA: Conversational Plan Refinement Feature (Feature 3 - CodeFest)
+ * Conversational Plan Refinement Feature (CodeFest)
  * 
  * Build the AI prompt for refining an existing trip plan based on user feedback.
  * This enables iterative, conversational modifications where users can:
@@ -50,7 +50,7 @@ function buildRefinementPrompt(
     ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results in the 'provider' field. For any block using a partner from MCP results: set partner=true, provider=<exact partner name>, source=\"partner\", and addFromOurRecommendation=true. For non-partner suggestions: set partner=false, source=\"suggested\", and addFromOurRecommendation=false. NEVER invent partner names."
     : "";
 
-  // ARIA: User Profile Personalization Integration (same as initial planning)
+  // User Profile Personalization Integration (same as initial planning)
   // Maintains profile context across refinements (dietary, accessibility, budget, style)
   // Even when feedback adds new constraints, original profile constraints remain
   const profileContext = userProfile ? `
@@ -72,11 +72,19 @@ CRITICAL INSTRUCTIONS:
 - If avoiding crowds, prefer early morning or late evening activities
 ` : "";
 
-  // ARIA: Serialize original plan for AI context
+  // Serialize original plan for AI context
   // AI needs to see the full current plan to make informed modifications
   const originalPlanJson = JSON.stringify(originalPlan, null, 2);
 
-  return `You are refining an existing trip plan based on user feedback.${catalogHint}${profileContext}
+  return `You are refining an existing trip plan based on user feedback.
+
+🚨 CRITICAL REQUIREMENT - READ THIS FIRST:
+You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) to get real Marriott Bonvoy partner data for this destination. 
+- For EVERY activity/restaurant block (both existing and new), you need: exact provider name, price, rating, earnPoints, images, bookingUrl, etc.
+- Call MCP tools at the START before generating your response
+- Use ONLY exact partner names from MCP tool results
+- If a block has partner=true: it MUST have price, earnPoints, bookingUrl, and all other partner fields
+${profileContext}
 
 ORIGINAL PLAN (Current state):
 ${originalPlanJson}
@@ -91,7 +99,9 @@ INSTRUCTIONS FOR REFINEMENT:
 4. Preserve partner placements where possible (unless feedback contradicts them)
 5. If feedback adds new constraints (e.g., "with elderly mom"), apply them throughout the plan
 6. If feedback contradicts profile (e.g., vegan user asks for steakhouse), prioritize the feedback
-7. Output the COMPLETE refined plan in the same JSON format
+7. For activities you keep from the original plan, maintain ALL their details (price, rating, earnPoints, bookingUrl, etc.)
+8. For new activities you add, use MCP tools to get full partner data with all fields
+9. Output the COMPLETE refined plan in the same JSON format
 
 Reply with JSON only — no markdown.
 
@@ -115,10 +125,23 @@ Schema:
       "addFromOurRecommendation"?: boolean,
       "notes"?: string,
       "latitude"?: number,
-      "longitude"?: number
+      "longitude"?: number,
+      "price"?: number,
+      "currency"?: string,
+      "rating"?: number,
+      "reviews"?: number,
+      "earnPoints"?: number,
+      "duration"?: string,
+      "bookingUrl"?: string,
+      "images"?: string[],
+      "highlights"?: string[],
+      "availability"?: string,
+      "cancellationPolicy"?: string
     }]
   }]
 }
+
+CRITICAL: When including partner activities from MCP tools, ALWAYS include all available fields: price, rating, reviews, earnPoints, duration, bookingUrl, images, highlights, availability, cancellationPolicy. These fields are essential for the user experience.
 
 IMPORTANT RULES:
 - type must EXACTLY match one of: "cab", "sightseeing", "restaurant", "activity", "game", "free", "travel"
@@ -141,7 +164,7 @@ ${feedback}`;
 }
 
 /**
- * ARIA: Conversational Plan Refinement (Feature 3 - CodeFest)
+ * Conversational Plan Refinement (CodeFest Feature)
  * 
  * Main orchestration function for refining an existing trip plan based on user feedback.
  * Enables multi-turn conversational modifications where users can iteratively improve plans.
@@ -172,7 +195,7 @@ export async function refinePlanFromFeedback(
 ): Promise<TripPlan> {
   const destinations = await loadDestinations();
 
-  // ARIA: Load user profile ONLY if userId is explicitly provided
+  // Load user profile if userId is explicitly provided
   // This maintains profile context across refinements (same behavior as initial planning)
   let userProfile: UserProfile | undefined;
   if (userId) {
@@ -180,7 +203,7 @@ export async function refinePlanFromFeedback(
     userProfile = userProfiles.find(p => p.id === userId);
   }
 
-  // ARIA: Keyword detection for map link generation
+  // Keyword detection for map link generation
   // Check if user wants map links in the refined plan (only generates if explicitly requested)
   const lowerFeedback = feedback.toLowerCase();
   const userWantsMap = lowerFeedback.includes("map") || 
@@ -214,7 +237,7 @@ export async function refinePlanFromFeedback(
 
     let refinedPlan = await buildTripPlanFromDraft(draft, request);
 
-    // ARIA: Programmatic map link generation (same as Feature 1)
+    // Programmatic map link generation (same as initial planning)
     // Add clean Google Maps links to each day if user requested them
     // Filters out cab blocks and duplicates to avoid messy looped routes
     refinedPlan = addMapLinksToTripPlan(refinedPlan, userWantsMap);
