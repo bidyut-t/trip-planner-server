@@ -136,7 +136,8 @@ CRITICAL INSTRUCTIONS:
 ` : "";
 
   const catalogHint = isCatalogMcpEnabled()
-    ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use realistic provider names."
+    ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use REAL, EXISTING businesses and attractions in the destination city. Research and include actual restaurants, museums, galleries, cafes, and activities that visitors can find and book. Use accurate names and details for real places that exist in the real world."
+    // ORIGINAL (commented for team discussion): "For non-partner activities: set isPartner=false and use realistic provider names."
     : "";
 
 
