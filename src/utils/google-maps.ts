@@ -6,8 +6,6 @@
  * Uses only actual destination blocks (restaurants, activities, attractions, etc.)
  * 
  * UPDATED: Now works with the new schema format (activities instead of blocks)
- * 
- * @author Aria
  */
 
 /**

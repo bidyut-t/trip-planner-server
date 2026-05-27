@@ -6,8 +6,6 @@ import { z } from "zod";
  * Follows the same pattern as partner data (JSON file + TypeScript types).
  * Profiles include dietary restrictions, accessibility needs, budget level,
  * travel style, and personal preferences for AI-powered personalization.
- * 
- * @author Aria
  */
 
 export interface UserProfile {

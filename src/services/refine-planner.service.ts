@@ -33,7 +33,6 @@ import { loadUserProfiles } from "./catalog/catalog.service.js";
  * @param destinations - Available destinations for validation
  * @param userProfile - Optional user profile for maintained personalization
  * @returns Complete prompt string for AI with original plan context and refinement instructions
- * @author Aria
  */
 function buildRefinementPrompt(
   originalPlan: TripPlan,
@@ -186,7 +185,6 @@ ${feedback}`;
  * @param feedback - Natural language modification request
  * @param userId - Optional user ID to maintain profile context across refinements
  * @returns Refined trip plan incorporating the feedback
- * @author Aria
  */
 export async function refinePlanFromFeedback(
   originalPlan: TripPlan,

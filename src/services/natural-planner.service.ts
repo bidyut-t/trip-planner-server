@@ -95,7 +95,6 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
  * @param suggestedKeywords - Keywords extracted from prompt
  * @param userProfile - Optional user profile for personalized planning
  * @returns Complete prompt string for AI with all context and instructions
- * @author Aria
  */
 function buildNaturalPlanPrompt(
   prompt: string,
@@ -282,7 +281,6 @@ ${prompt}`;
  * @param prompt - User's natural language request
  * @param userId - Optional user ID to select specific profile (no profile applied if omitted)
  * @returns Trip request and personalized plan (or generic plan if no userId)
- * @author Aria (Map Links + User Profiles)
  */
 export async function planFromNaturalLanguage(
   prompt: string,
