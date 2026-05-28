@@ -4,6 +4,7 @@ import { modelsRouter } from "./routes/models.routes.js";
 import { tripRouter } from "./routes/trip.routes.js";
 import { loadCatalog } from "./services/catalog/catalog.service.js";
 import { isOpenAiSdkEnabled } from "./utils/env.js";
+import { weatherRouter } from "./routes/weather.routes.js";
 
 const app = express();
 const port = Number(process.env.PORT) || 8081;
@@ -45,6 +46,7 @@ app.get("/api/catalog/:destination", async (req, res) => {
 
 app.use("/api/models", modelsRouter);
 app.use("/api/trips", tripRouter);
+app.use("/api/weather", weatherRouter);
 
 app.listen(port, () => {
   console.log(`Trip planner server listening on http://localhost:${port}`);
