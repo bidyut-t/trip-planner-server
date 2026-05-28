@@ -7,7 +7,8 @@
     "durationMinutes": 120,
     "priority": 8,
     "latitude": 26.9124,
-    "longitude": 75.7873
+    "longitude": 75.7873,
+    "image": "https://images.unsplash.com/photo-1567401893414-76b7b1e5a7a5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   },
   {
     "id": "act-2",
@@ -17,7 +18,8 @@
     "durationMinutes": 150,
     "priority": 7,
     "latitude": 26.9134,
-    "longitude": 75.7992
+    "longitude": 75.7992,
+    "image": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   },
   {
     "id": "act-3",
@@ -27,7 +29,8 @@
     "durationMinutes": 180,
     "priority": 9,
     "latitude": 26.9855,
-    "longitude": 75.8513
+    "longitude": 75.8513,
+    "image": "https://images.unsplash.com/photo-1564507592333-c60657eea523?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   },
   {
     "id": "act-nyc-1",
@@ -37,7 +40,8 @@
     "durationMinutes": 240,
     "priority": 10,
     "latitude": 40.7484,
-    "longitude": -73.9857
+    "longitude": -73.9857,
+    "image": "https://images.unsplash.com/photo-1546436836-07a91091f160?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   },
   {
     "id": "act-nyc-2",
@@ -47,7 +51,8 @@
     "durationMinutes": 360,
     "priority": 9,
     "latitude": 40.758,
-    "longitude": -73.9855
+    "longitude": -73.9855,
+    "image": "https://images.unsplash.com/photo-1549417229-aa67d3263c09?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   },
   {
     "id": "act-nyc-3",
@@ -57,6 +62,7 @@
     "durationMinutes": 180,
     "priority": 8,
     "latitude": 40.7157,
-    "longitude": -73.9977
+    "longitude": -73.9977,
+    "image": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
   }
 ]

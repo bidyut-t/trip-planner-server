@@ -6,6 +6,10 @@ import {
   loadCatalog,
   loadDestinations,
   loadUserProfiles,
+  loadPartnerRestaurants,
+  loadPartnerActivities,
+  loadPartnerCabs,
+  loadPartnerGames,
   type DestinationMeta,
 } from "./catalog/catalog.service.js";
 import { extractPromptKeywords } from "./nlp/nlp-parser.keywords.js";
@@ -21,6 +25,7 @@ import {
 import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 /**
  * Validate and enrich partner information in the new schema format
+ * Ensures AI-modified partner data is replaced with authentic database data
  */
 async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
   if (!result || !result.destination || !result.days) {
@@ -30,41 +35,132 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
   // Extract city name for partner validation
   const city = result.destination.split(",")[0]?.trim() || result.destination;
   
-  // Convert new schema activities to old PlanBlock format for validation
-  const allBlocks: any[] = [];
-  
   try {
+    // Load all partner data for the city
+    const [restaurants, activities, cabs, games] = await Promise.all([
+      loadPartnerRestaurants(city),
+      loadPartnerActivities(city), 
+      loadPartnerCabs(city),
+      loadPartnerGames(city)
+    ]);
+    
+    // Create lookup maps for quick matching
+    const partnerLookup = new Map();
+    
+    // Add restaurants to lookup (match by name and id)
+    restaurants.forEach(partner => {
+      partnerLookup.set(partner.name.toLowerCase(), { ...partner, type: 'restaurant' });
+      partnerLookup.set(partner.id, { ...partner, type: 'restaurant' });
+    });
+    
+    // Add activities to lookup
+    activities.forEach(partner => {
+      partnerLookup.set(partner.name.toLowerCase(), { ...partner, type: 'activity' });
+      partnerLookup.set(partner.id, { ...partner, type: 'activity' });
+    });
+    
+    // Add cabs to lookup
+    cabs.forEach(partner => {
+      partnerLookup.set(partner.name.toLowerCase(), { ...partner, type: 'transportation' });
+      partnerLookup.set(partner.id, { ...partner, type: 'transportation' });
+    });
+    
+    // Add games to lookup
+    games.forEach(partner => {
+      partnerLookup.set(partner.name.toLowerCase(), { ...partner, type: 'activity' });
+      partnerLookup.set(partner.id, { ...partner, type: 'activity' });
+    });
+
+    let partnersFound = 0;
+    let partnersEnriched = 0;
+
+    // Process each day's activities
     for (const day of result.days) {
       if (!day.activities) continue;
       
       for (const activity of day.activities) {
-        if (activity.isPartner && activity.activity?.provider) {
-          // Create a PlanBlock-like object for validation
-          const blockType = activity.type === 'attraction' ? 'activity' : 
-                           activity.type === 'museum' ? 'activity' : 
-                           activity.type;
-                           
-          const block = {
-            start: activity.startTime || "09:00",
-            end: activity.endTime || "10:00", 
-            type: blockType,
-            title: activity.activity.name || "Untitled Activity",
-            partner: true,
-            provider: activity.activity.provider,
-            source: "partner"
-          };
+        if (activity.isPartner && activity.activity) {
+          partnersFound++;
           
-          allBlocks.push(block);
+          // Try multiple matching strategies
+          let partnerData = null;
+          const activityData = activity.activity;
           
-          // Validate this partner (simplified for now)
-          console.log(`[partner-validation] Checking partner: ${activity.activity.provider}`);
+          // Strategy 1: Match by exact ID
+          if (activityData.id) {
+            partnerData = partnerLookup.get(activityData.id);
+          }
+          
+          // Strategy 2: Match by provider name (case insensitive)
+          if (!partnerData && activityData.provider) {
+            partnerData = partnerLookup.get(activityData.provider.toLowerCase());
+          }
+          
+          // Strategy 3: Match by activity name (case insensitive)
+          if (!partnerData && activityData.name) {
+            partnerData = partnerLookup.get(activityData.name.toLowerCase());
+          }
+          
+          // Strategy 4: Partial name matching for cases like "Joe's Pizza - Greenwich Village" vs "Joe's Pizza - Greenwich Village"
+          if (!partnerData) {
+            for (const [key, partner] of partnerLookup) {
+              if (typeof key === 'string' && (
+                key.includes(activityData.name?.toLowerCase()) || 
+                activityData.name?.toLowerCase().includes(key) ||
+                key.includes(activityData.provider?.toLowerCase()) ||
+                activityData.provider?.toLowerCase().includes(key)
+              )) {
+                partnerData = partner;
+                break;
+              }
+            }
+          }
+          
+          if (partnerData) {
+            console.log(`[partner-validation] ✅ Found partner: ${partnerData.name} (${partnerData.id})`);
+            
+            // Create enriched activity preserving AI data but overriding with authentic partner data
+            const enrichedActivity = {
+              ...activityData, // Keep all AI-generated rich data (descriptions, prices, images, etc.)
+              
+              // Override ONLY the core identifying and location fields with authentic data
+              id: partnerData.id,
+              name: partnerData.name,
+              provider: partnerData.name, // Ensure provider matches exact partner name
+              
+              // Override coordinates with authentic data (this was the main issue)
+              latitude: partnerData.latitude,
+              longitude: partnerData.longitude,
+              
+              // Add metadata to track this is authentic partner data
+              _partnerVerified: true,
+              _partnerTags: partnerData.tags,
+              _partnerDuration: partnerData.durationMinutes,
+              _partnerPriority: partnerData.priority,
+            };
+            
+            // Replace the activity with enriched data
+            activity.activity = enrichedActivity;
+            partnersEnriched++;
+            
+            console.log(`[partner-validation] 🔄 Enriched '${partnerData.name}' with authentic coordinates: lat=${partnerData.latitude}, lng=${partnerData.longitude}`);
+          } else {
+            console.warn(`[partner-validation] ⚠️ No match found for partner: '${activityData.provider || activityData.name}' (ID: ${activityData.id})`);
+            console.warn(`[partner-validation] Available partners: ${Array.from(partnerLookup.keys()).filter(k => typeof k === 'string').join(', ')}`);
+          }
         }
       }
     }
 
-    // Log validation summary
+    console.log(`[partner-validation] === SUMMARY ===`);
     console.log(`[partner-validation] City: ${city}`);
-    console.log(`[partner-validation] Total partner activities processed: ${allBlocks.length}`);
+    console.log(`[partner-validation] Partners found in AI response: ${partnersFound}`);
+    console.log(`[partner-validation] Partners enriched with authentic data: ${partnersEnriched}`);
+    console.log(`[partner-validation] Total available partners in database: ${restaurants.length + activities.length + cabs.length + games.length}`);
+    
+    if (partnersFound > partnersEnriched) {
+      console.warn(`[partner-validation] ⚠️ ${partnersFound - partnersEnriched} partners could not be matched with database records`);
+    }
     
   } catch (error) {
     console.warn(`[partner-validation] Error during validation:`, error);
