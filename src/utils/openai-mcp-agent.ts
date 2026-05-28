@@ -5,9 +5,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { getOpenAiModelId, isCatalogMcpEnabled } from "./env.js";
 import { getTripCatalogMcpServers } from "./mcp-catalog-config.js";
+import { makeGuardrailsRequest } from "./guardrails.js";
+
 
 // Disable SSL certificate verification for custom endpoints
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
 interface McpClient {
   client: Client;
@@ -28,7 +30,7 @@ async function getMcpClient(): Promise<McpClient | null> {
   try {
     const servers = getTripCatalogMcpServers();
     const serverConfig = servers["trip-catalog"];
-    
+
     if (!serverConfig) {
       console.warn("[openai-mcp] No trip-catalog server config found");
       return null;
@@ -50,7 +52,7 @@ async function getMcpClient(): Promise<McpClient | null> {
         capabilities: {
           tools: {},
         },
-      }
+      },
     );
 
     await client.connect(transport);
@@ -58,7 +60,9 @@ async function getMcpClient(): Promise<McpClient | null> {
 
     // Get available tools
     const toolsResponse = await client.listTools();
-    console.log(`[openai-mcp] Available tools: ${toolsResponse.tools.map(t => t.name).join(', ')}`);
+    console.log(
+      `[openai-mcp] Available tools: ${toolsResponse.tools.map((t) => t.name).join(", ")}`,
+    );
 
     mcpClientCache = {
       client,
@@ -72,8 +76,10 @@ async function getMcpClient(): Promise<McpClient | null> {
   }
 }
 
-function convertMcpToolsToOpenAi(mcpTools: Tool[]): OpenAI.Chat.Completions.ChatCompletionTool[] {
-  return mcpTools.map(tool => ({
+function convertMcpToolsToOpenAi(
+  mcpTools: Tool[],
+): OpenAI.Chat.Completions.ChatCompletionTool[] {
+  return mcpTools.map((tool) => ({
     type: "function" as const,
     function: {
       name: tool.name,
@@ -91,7 +97,8 @@ export async function runOpenAiPromptWithMcp(prompt: string): Promise<string> {
       "OPENAI_API_KEY is required. Set it in .env (see .env.example).",
     );
   }
-console.log(`[openai-mcp] Starting OpenAI client`);
+
+  console.log(`[openai-mcp] Starting OpenAI client`);
   const client = new OpenAI({
     apiKey,
     baseURL,
@@ -102,7 +109,7 @@ console.log(`[openai-mcp] Starting OpenAI client`);
 
   const mcpClient = await getMcpClient();
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: "user", content: prompt }
+    { role: "user", content: prompt },
   ];
 
   let tools: OpenAI.Chat.Completions.ChatCompletionTool[] | undefined;
@@ -118,14 +125,24 @@ console.log(`[openai-mcp] Starting OpenAI client`);
     iteration++;
     console.log(`[openai-mcp] Iteration ${iteration}`);
 
-    const completion = await client.chat.completions.create({
+    // const completion = await client.chat.completions.create({
+    //   model: getOpenAiModelId(),
+    //   messages,
+    //   tools,
+    //   tool_choice: iteration === 1 && tools ? "auto" : undefined,
+    // });
+
+    const completion = await makeGuardrailsRequest({
       model: getOpenAiModelId(),
       messages,
+      guardrails: ["PII Filter"],
       tools,
       tool_choice: iteration === 1 && tools ? "auto" : undefined,
     });
 
-    console.log(`[openai-mcp] Iteration ${iteration} completed ${completion.choices[0]?.message?.content?.trim()}`);
+    console.log(
+      `[openai-mcp] Iteration ${iteration} completed ${completion.choices[0]?.message?.content?.trim()}`,
+    );
     const message = completion.choices[0]?.message;
     if (!message) {
       throw new Error("OpenAI returned no message");
@@ -143,25 +160,32 @@ console.log(`[openai-mcp] Starting OpenAI client`);
     }
 
     // Process tool calls
-    console.log(`[openai-mcp] Processing ${message.tool_calls.length} tool calls`);
-    
+    console.log(
+      `[openai-mcp] Processing ${message.tool_calls.length} tool calls`,
+    );
+
     for (const toolCall of message.tool_calls) {
       if (!mcpClient) {
-        console.warn("[openai-mcp] Tool call requested but no MCP client available");
+        console.warn(
+          "[openai-mcp] Tool call requested but no MCP client available",
+        );
         continue;
       }
 
       try {
         const args = JSON.parse(toolCall.function.arguments);
-        console.log(`[openai-mcp] Calling tool: ${toolCall.function.name} with args:`, args);
-        
+        console.log(
+          `[openai-mcp] Calling tool: ${toolCall.function.name} with args:`,
+          args,
+        );
+
         const result = await mcpClient.client.callTool({
           name: toolCall.function.name,
           arguments: args,
         });
 
         const resultText = result.content
-          .map(c => c.type === "text" ? c.text : "[non-text content]")
+          .map((c) => (c.type === "text" ? c.text : "[non-text content]"))
           .join("\n");
 
         messages.push({
@@ -170,7 +194,10 @@ console.log(`[openai-mcp] Starting OpenAI client`);
           content: resultText,
         });
 
-        console.log(`[openai-mcp] Tool ${toolCall.function.name} result:`, resultText.substring(0, 200) + "...");
+        console.log(
+          `[openai-mcp] Tool ${toolCall?.function?.name} result:`,
+          resultText.substring(0, 200) + "...",
+        );
       } catch (error) {
         console.error(`[openai-mcp] Tool call failed:`, error);
         messages.push({
@@ -182,7 +209,9 @@ console.log(`[openai-mcp] Starting OpenAI client`);
     }
   }
 
-  throw new Error("Maximum iterations reached without getting a final response");
+  throw new Error(
+    "Maximum iterations reached without getting a final response",
+  );
 }
 
 // Cleanup function to close MCP connections
@@ -221,10 +250,17 @@ export async function runOpenAiPrompt(prompt: string): Promise<string> {
     }),
   });
 
-  const completion = await client.chat.completions.create({
+  // const completion = await client.chat.completions.create({
+  //   model: getOpenAiModelId(),
+  //   messages: [{ role: "user", content: prompt }],
+  // });
+
+  const completion = await makeGuardrailsRequest({
     model: getOpenAiModelId(),
     messages: [{ role: "user", content: prompt }],
+    guardrails: ["PII Filter"],
   });
+  
 
   const content = completion.choices[0]?.message?.content?.trim();
   if (!content) {
