@@ -10,6 +10,7 @@ import { isCatalogMcpEnabled } from "../utils/env.js";
 import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
 import { buildScheduleRulesBlock } from "./prompts/planner.schedule-rules.js";
 import { addMapLinksToTripPlan } from "../utils/google-maps.js";
+import { mergeRefinedPlanWithOriginal } from "../utils/plan-merger.js";
 import { loadUserProfiles } from "./catalog/catalog.service.js";
 
 /**
@@ -77,7 +78,7 @@ CRITICAL INSTRUCTIONS:
 
   return `You are refining an existing trip plan based on user feedback.
 
-🚨 CRITICAL REQUIREMENT - READ THIS FIRST:
+CRITICAL REQUIREMENT - READ THIS FIRST:
 You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) to get real Marriott Bonvoy partner data for this destination. 
 - For EVERY activity/restaurant block (both existing and new), you need: exact provider name, price, rating, earnPoints, images, bookingUrl, etc.
 - Call MCP tools at the START before generating your response
@@ -98,9 +99,14 @@ INSTRUCTIONS FOR REFINEMENT:
 4. Preserve partner placements where possible (unless feedback contradicts them)
 5. If feedback adds new constraints (e.g., "with elderly mom"), apply them throughout the plan
 6. If feedback contradicts profile (e.g., vegan user asks for steakhouse), prioritize the feedback
-7. For activities you keep from the original plan, maintain ALL their details (price, rating, earnPoints, bookingUrl, etc.)
-8. For new activities you add, use MCP tools to get full partner data with all fields
-9. Output the COMPLETE refined plan in the same JSON format
+
+CRITICAL DATA PRESERVATION RULES - MUST FOLLOW:
+7. For activities you keep from the original plan: COPY ALL their fields EXACTLY (price, rating, earnPoints, bookingUrl, images, highlights, etc.)
+8. NEVER output price=0, earnPoints=0, or empty images[] for activities that had data in the original plan
+9. If an activity had price=$50 and earnPoints=200 in the original, keep those EXACT values
+10. For new activities you add, use MCP tools to get full partner data with all fields
+11. Output the COMPLETE refined plan in the same JSON format as the original
+12. Double-check: every activity should have realistic prices, points, and images - if you see zeros, you did it wrong!
 
 Reply with JSON only — no markdown.
 
@@ -234,6 +240,12 @@ export async function refinePlanFromFeedback(
     };
 
     let refinedPlan = await buildTripPlanFromDraft(draft, request);
+
+    // DATA INTEGRITY GUARANTEE: Merge original data back into refined plan
+    // Problem: AI sometimes simplifies JSON during refinement, losing prices/points/images
+    // Solution: Programmatically copy ALL data from matching original activities
+    // This ensures zero data loss - code guarantees what AI prompts cannot
+    refinedPlan = mergeRefinedPlanWithOriginal(originalPlan, refinedPlan);
 
     // Programmatic map link generation (same as initial planning)
     // Add clean Google Maps links to each day if user requested them
