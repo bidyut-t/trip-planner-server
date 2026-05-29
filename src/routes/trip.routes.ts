@@ -15,8 +15,8 @@ export const tripRouter = Router();
 /**
  * AI-Powered Intent Detection
  * 
- * Analyzes user's message to determine: "Is this modifying current plan or requesting new trip?"
- * Much more reliable than keyword matching - AI understands nuance and context.
+ * Analyzes user's message to determine if they are modifying the current plan or requesting a new trip.
+ * This is more reliable than keyword matching as AI understands nuance and context.
  * 
  * Examples:
  * - "add museums" → 'modify' (refine existing plan)
@@ -82,42 +82,42 @@ function handlePlanError(err: unknown, res: import("express").Response): void {
 }
 
 // Unified endpoint for both new trip planning and conversational refinement
-// AI-POWERED INTENT DETECTION: AI decides whether to modify existing plan or create new one
-// No brittle keyword detection - AI understands natural conversation
+// Uses AI-powered intent detection to determine whether to modify existing plan or create new one
+// This replaces brittle keyword detection with natural language understanding
 tripRouter.post("/plan/natural", async (req, res) => {
   try {
     const { prompt, userId, previousPlan } = planTripNaturalRequestSchema.parse(req.body);
     
     let result;
     if (previousPlan) {
-      // AI INTENT DETECTION: Let AI decide if this is a modification or new plan request
+      // AI determines if this is a modification or new plan request
       console.log("[unified-endpoint] Previous plan exists - AI will determine intent");
       console.log("[unified-endpoint] User request:", prompt);
       console.log("[unified-endpoint] Current destination:", previousPlan.destination);
       
-      // AI analyzes: "Is user modifying current plan, or requesting entirely new trip?"
+      // AI analyzes whether user is modifying current plan or requesting an entirely new trip
       const intent = await determineUserIntent(prompt, previousPlan);
       console.log("[unified-endpoint] AI detected intent:", intent);
       
       if (intent === 'modify') {
-        // DELTA REFINEMENT MODE: AI generates only changes
+        // Delta refinement mode: AI generates only changes
         console.log("[unified-endpoint] → Delta refinement mode - modifying existing plan");
         const delta = await generateRefinementDeltas(previousPlan, prompt, userId);
         console.log("[delta-refiner] Operations:", delta.operations.length);
         result = applyDeltasToPlan(previousPlan, delta);
         console.log("[delta-refiner] Applied deltas successfully");
       } else {
-        // NEW PLAN MODE: User wants a completely different trip
+        // New plan mode: User wants a completely different trip
         console.log("[unified-endpoint] → New plan mode - user wants different trip");
         result = await planFromNaturalLanguage(prompt, userId);
       }
     } else {
-      // No previous plan: definitely a new trip request
+      // No previous plan: this is a new trip request
       console.log("[unified-endpoint] New plan mode - no previous context");
       result = await planFromNaturalLanguage(prompt, userId);
     }
     
-    // DEBUG: Log what we're sending back
+    // Log outgoing response for debugging
     const activityCount = result.days?.[0]?.blocks?.length || result.days?.[0]?.activities?.length || 0;
     console.log(`[unified-endpoint] Returning plan with ${activityCount} activities`);
     if (result.days?.[0]?.blocks) {

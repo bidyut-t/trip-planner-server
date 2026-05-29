@@ -241,7 +241,7 @@ export async function refinePlanFromFeedback(
 
     let refinedPlan = await buildTripPlanFromDraft(draft, request);
 
-    // DATA INTEGRITY GUARANTEE: Merge original data back into refined plan
+    // Merge original data back into refined plan to ensure data integrity
     // Problem: AI sometimes simplifies JSON during refinement, losing prices/points/images
     // Solution: Programmatically copy ALL data from matching original activities
     // This ensures zero data loss - code guarantees what AI prompts cannot

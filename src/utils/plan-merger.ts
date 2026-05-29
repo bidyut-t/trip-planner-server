@@ -7,7 +7,7 @@
  * Problem: LLMs sometimes simplify JSON during refinement, losing prices, points, images
  * Solution: After AI refinement, copy all data from matching original activities
  * 
- * This is production-quality data integrity - never trust LLMs with data preservation!
+ * This utility ensures production-quality data integrity by preserving all original data.
  */
 
 interface Block {

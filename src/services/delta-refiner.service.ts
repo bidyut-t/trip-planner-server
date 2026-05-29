@@ -1,17 +1,15 @@
 /**
  * Delta-Based Refinement Service
  * 
- * Revolutionary approach to conversational plan modifications.
+ * Handles conversational plan modifications using a delta-based approach.
  * Instead of regenerating the entire plan (which causes data loss),
- * the AI generates ONLY the changes (deltas) as structured operations.
+ * the AI generates only the changes (deltas) as structured operations.
  * 
  * Architecture:
- * 1. AI analyzes user request + current plan
+ * 1. AI analyzes user request and current plan
  * 2. AI returns delta operations: add/remove/modify
  * 3. Backend applies deltas to existing plan
- * 4. Original activities never touched = zero data loss!
- * 
- * This is how real conversational AI systems work (ChatGPT, Claude).
+ * 4. Original activities remain unchanged, preserving all data
  */
 
 import { runOpenAiPrompt } from "../utils/openai-mcp-agent.js";
@@ -55,8 +53,8 @@ export interface RefinementDelta {
 /**
  * Generate refinement deltas from user feedback
  * 
- * The AI focuses ONLY on what needs to change, not regenerating everything.
- * This keeps the AI's attention on generating complete, quality data for NEW items.
+ * The AI generates only the required changes, not the entire plan.
+ * This approach keeps the AI focused on generating complete data for new items.
  * 
  * @param originalPlan - Current plan (never modified, only referenced)
  * @param feedback - User's modification request
@@ -474,7 +472,7 @@ Reply with JSON only.`;
       
       console.log(`[delta-refiner] After applying deltas, plan ends at: ${actualEndTime ? convertTo12Hour(actualEndTime) : 'UNKNOWN - THIS IS A PROBLEM'}`);
       
-      // CRITICAL: If we can't determine the end time, something went wrong
+      // If we can't determine the end time, something went wrong
       if (!actualEndTime) {
         console.error(`[delta-refiner] CANNOT DETERMINE END TIME - Operations likely failed to apply!`);
         throw new Error(
@@ -612,7 +610,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
           cancellationPolicy: act.cancellationPolicy,
         }));
 
-        // SMART PLACEMENT: Apply time adjustments first
+        // Apply time adjustments for smart placement
         if (op.placement?.adjustments) {
           for (const adjustment of op.placement.adjustments) {
             const activityIndex = activities.findIndex((a: any) =>
@@ -691,7 +689,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
           return timeA.localeCompare(timeB);
         });
         
-        // NOTE: Overlap resolution DISABLED - it was causing activities to shift
+        // Note: Overlap resolution disabled - it was causing activities to shift to midnight
         // to late times when user wanted to shorten the day.
         // The AI is now responsible for providing correct, non-overlapping times.
         // activities = resolveTimeOverlaps(activities);
@@ -740,7 +738,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
     }
   }
 
-  // CRITICAL: Sort activities chronologically and validate times
+  // Sort activities chronologically and validate times
   activities.sort((a: any, b: any) => {
     const timeA = normalizeTimeForSorting(a.start || a.startTime || '00:00');
     const timeB = normalizeTimeForSorting(b.start || b.startTime || '00:00');
@@ -756,7 +754,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
     const currStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
     
     if (currStart < prevEnd) {
-      // OVERLAP DETECTED: Log warning but don't auto-shift (AI should fix this)
+      // Overlap detected: Log warning but don't auto-shift (AI should fix this)
       const prevName = prev.title || prev.name || prev.activity?.name || 'Unknown';
       const currName = curr.title || curr.name || curr.activity?.name || 'Unknown';
       console.warn(`[delta-refiner] TIME CONFLICT: "${prevName}" ends at ${prevEnd} but "${currName}" starts at ${currStart}`);
@@ -770,7 +768,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
     day.activities = activities;
   }
 
-  // CRITICAL: Force valid timeline (no overlaps, no backwards times)
+  // Force valid timeline (no overlaps, no backwards times)
   return forceValidTimeline(modifiedPlan);
 }
 

@@ -1,6 +1,8 @@
 /**
- * AGGRESSIVE TIME FIXING - Forces all activities into valid, non-overlapping time slots
- * This runs AFTER the AI generates the plan to ensure times always make sense.
+ * Timeline Validation Utility
+ * 
+ * Forces all activities into valid, non-overlapping time slots.
+ * This runs after the AI generates the plan to ensure times always make sense.
  */
 
 import { normalizeTimeForSorting, convertTo12Hour } from './time-utils.js';
@@ -25,7 +27,7 @@ export function forceValidTimeline(plan: any): any {
       const end24 = normalizeTimeForSorting(endTime);
       
       if (end24 <= start24 || (startTime.includes('PM') && endTime.includes('AM'))) {
-        // BACKWARDS! Fix it
+        // Activity ends before start - fix it
         const [startHour, startMin] = start24.split(':').map(Number);
         let newEndHour = startHour + 2; // Add 2 hours
         if (newEndHour >= 24) newEndHour = 23;
@@ -58,7 +60,7 @@ export function forceValidTimeline(plan: any): any {
       const currStart = normalizeTimeForSorting(curr.startTime || curr.start || '00:00');
       
       if (currStart < prevEnd) {
-        // OVERLAP! Just log it, don't shift
+        // Activity overlaps with previous - log warning
         const prevName = prev.title || prev.name || prev.activity?.name || 'Activity';
         const currName = curr.title || curr.name || curr.activity?.name || 'Activity';
         console.warn(`[force-timeline] OVERLAP DETECTED: "${prevName}" ends at ${prevEnd} but "${currName}" starts at ${currStart}`);

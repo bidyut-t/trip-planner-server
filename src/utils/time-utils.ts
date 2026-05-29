@@ -111,7 +111,7 @@ export function extractClosingTime(availability: string): string | null {
         } else if (period === 'AM' && closingHour === 12) {
           closingHour = 0;
         } else if (period === 'AM' && closingHour < 12) {
-          // CRITICAL FIX: Overnight closing times (like 2 AM, 4 AM) mean next day
+          // Fix for overnight closing times (like 2 AM, 4 AM) which mean next day
           // For trip planning, we should NOT schedule activities into overnight hours
           // Convert to a reasonable same-day closing time instead
           // Example: "10am-4am" becomes "10am-11pm" for planning purposes
@@ -128,7 +128,7 @@ export function extractClosingTime(availability: string): string | null {
     }
   }
   
-  // FALLBACK: If we can't parse closing time, use conservative default (8pm)
+  // Fallback: If we can't parse closing time, use conservative default (8pm)
   console.warn(`[extractClosingTime] Could not parse "${original}" → using FALLBACK: 8:00 PM (20:00)`);
   return '20:00'; // Conservative default: 8pm
 }

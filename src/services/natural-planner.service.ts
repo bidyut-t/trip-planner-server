@@ -50,16 +50,16 @@ async function validateClosingTimes(plan: any): Promise<any> {
       
       if (!startTime || !endTime) continue;
       
-      // VALIDATE: End time must be after start time
+      // Validate: End time must be after start time
       const startTime24 = normalizeTimeForSorting(startTime);
       const endTime24 = normalizeTimeForSorting(endTime);
       
       if (endTime24 <= startTime24) {
-        // CRITICAL ERROR: Activity ends before/at start time!
+        // Error: Activity ends before/at start time
         const issue = endTime24 < startTime24 ? 'ends before start' : 'ends at same time as start';
         console.error(`[closing-time-validation] BACKWARDS TIME: "${activityName}" ${startTime}-${endTime} (${issue}!)`);
         
-        // AUTO-FIX: Assume it's a same-day activity
+        // Auto-fix: Assume it's a same-day activity
         // If it's PM to AM (like "2:00 PM - 4:00 AM"), assume they meant PM to PM
         const startHasAM = startTime.includes('AM');
         const endHasAM = endTime.includes('AM');
@@ -98,13 +98,13 @@ async function validateClosingTimes(plan: any): Promise<any> {
       if (!closingTime) continue; // Open 24/7 or couldn't parse
       
       if (endTime24 > closingTime) {
-        // VIOLATION: Activity ends after closing
+        // Violation: Activity ends after closing
         const closingTime12 = convertTo12Hour(closingTime);
         const minutesOver = getTimeDiffMinutes(closingTime, endTime24);
         
         console.warn(`[closing-time-validation] "${activityName}" ends at ${endTime} but closes at ${closingTime12} (${minutesOver} min over)`);
         
-        // AUTO-FIX: Adjust end time to closing time
+        // Auto-fix: Adjust end time to closing time
         activity.endTime = closingTime12;
         activity.end = closingTime12;
         if (activity.timeBlock) {
@@ -543,9 +543,9 @@ export async function planFromNaturalLanguage(
     // Validate and enrich partner information
     const validatedResult = await validateAndEnrichNewSchemaPartners(result);
     
-    // CLOSING TIME VALIDATION (Phase 1 - Initial Plans)
+    // Closing time validation for initial plans
     // Validate that all activities respect business hours
-    // CRITICAL: Force timeline to be valid (fix backwards times, overlaps)
+    // Force timeline to be valid (fix backwards times, overlaps)
     const timelineFixed = forceValidTimeline(validatedResult);
     
     // Then validate closing times
