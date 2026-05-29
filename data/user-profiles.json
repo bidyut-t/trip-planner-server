@@ -17,10 +17,10 @@
     "id": "user-002",
     "name": "Goose",
     "bonvoyMemberNumber": "234567890",
-    "dietaryRestrictions": [],
+    "dietaryRestrictions": ["vegetarian"],
     "accessibilityNeeds": [],
     "budgetLevel": "moderate",
-    "travelStyle": "foodie",
+    "travelStyle": "adventure",
     "preferences": {
       "avoidCrowds": false,
       "preferLocalExperiences": true,
