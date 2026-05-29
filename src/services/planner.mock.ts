@@ -165,7 +165,7 @@ export function planTripMock(input: PlanTripRequest, catalog: CatalogBundle): Tr
       trackPartner(game.name, "game");
     }
 
-    return { date, blocks, mapLink: undefined }; // ARIA: Added mapLink for consistency
+    return { date, blocks, mapLink: undefined }; // Added mapLink for schema consistency
   });
 
   return {
