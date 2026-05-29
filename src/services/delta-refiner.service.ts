@@ -87,6 +87,13 @@ User Profile Context:
   // Serialize current plan for AI reference - include FULL timeline with times AND NAMES
   const currentPlanSummary = originalPlan.days?.map((day, idx) => {
     const activities = day.blocks || [];
+    
+    // Simple gap calculation
+    let gapsInfo = "FULL DAY AVAILABLE: 8:00 AM - 10:00 PM";
+    if (activities.length > 0) {
+      gapsInfo = "Look for gaps between existing activities to schedule new ones.";
+    }
+    
     return `Day ${idx + 1} (${day.date}):
 ${activities.map((act: any, i: number) => {
   const startTime = act.start || act.startTime || '';
@@ -96,6 +103,9 @@ ${activities.map((act: any, i: number) => {
   const type = act.type || act.activity?.type || '';
   return `  ${i + 1}. [${startTime}-${endTime}] "${name}" (${type}) ${price ? '$' + price : ''}`;
 }).join('\n')}
+
+AVAILABLE TIME GAPS FOR NEW ACTIVITIES:
+${gapsInfo}
 
 WARNING: When using REMOVE or MODIFY operations, you MUST copy the activity names EXACTLY as shown above (in quotes).`;
   }).join('\n\n');
@@ -115,10 +125,18 @@ Generate ONLY the changes needed (deltas). Don't regenerate the entire plan.
 
 **CRITICAL RULE**: A day should have 6-7 activities MAX and end by 10 PM. When adding activities, you MUST remove or shorten others to maintain balance.
 
-**NO OVERLAPS ALLOWED**: Look at the CURRENT PLAN timeline above. When adding activities, you MUST find EMPTY time slots. 
-   - Example: Current plan has activity 2:00 PM - 4:00 PM → You CANNOT schedule anything between 2:00 PM - 4:00 PM!
-   - You must schedule BEFORE (e.g., 12:00 PM - 2:00 PM) or AFTER (e.g., 4:00 PM - 6:00 PM)
-   - If NO gaps exist, you MUST REMOVE an existing activity first to make room!
+**ABSOLUTELY NO OVERLAPS ALLOWED - CRITICAL**: 
+
+AVAILABLE TIME GAPS shown above are the ONLY slots where you can add new activities.
+
+BEFORE adding any activity:
+1. Check "AVAILABLE TIME GAPS" section above
+2. Choose a gap that fits your activity duration  
+3. Schedule ONLY within that gap
+
+Example: Gap is [4:00 PM - 7:30 PM]
+✅ CORRECT: "start": "4:00 PM", "end": "6:00 PM" (fits in gap)
+❌ WRONG: "start": "2:00 PM", "end": "4:00 PM" (overlaps existing!)
 
 REQUEST TYPES:
 
@@ -149,17 +167,22 @@ REQUEST TYPES:
    - "with elderly" = slower pace, rest breaks, accessibility
    - "faster pace" = reduce durations, fit more activities
 
-3. SHORTEN DAY (e.g., "end by 9pm"):
+3. SHORTEN DAY (e.g., "end by 6pm"):
    CRITICAL: Last activity must end AT OR BEFORE requested time.
    
    Process:
-   a) Identify current last activity end time
-   b) Calculate time to save
-   c) Work backwards: shorten/remove activities from end
-   d) Compress durations (museums: 3h→2h, meals: 2h→1.5h)
-   e) VERIFY: Check that last activity now ends by requested time
-      - If still too late, REMOVE MORE activities
-      - Do NOT submit until verification passes
+   a) Identify activities that end AFTER the requested time
+   b) REMOVE them OR modify their end times
+   c) NEVER just add a note - you must actually CHANGE the schedule
+   
+   Example: User says "end by 6pm" but plan ends at 9:30pm
+   CORRECT: 
+   {"type": "remove", "activityNames": ["Asiate at Mandarin Oriental"]}
+   OR:
+   {"type": "modify", "activityName": "Asiate at Mandarin Oriental", "changes": {"end": "6:00 PM", "endTime": "6:00 PM"}}
+   
+   WRONG:
+   {"type": "modify", "activityName": "Day 1", "changes": {"notes": "End by 6pm"}}
 
 4. REMOVE ACTIVITIES:
    - Remove ONLY activities explicitly mentioned
@@ -691,10 +714,8 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
           return timeA.localeCompare(timeB);
         });
         
-        // NOTE: Overlap resolution DISABLED - it was causing activities to shift
-        // to late times when user wanted to shorten the day.
-        // The AI is now responsible for providing correct, non-overlapping times.
-        // activities = resolveTimeOverlaps(activities);
+        // AUTOMATIC OVERLAP RESOLUTION: Fix any overlaps programmatically
+        activities = resolveTimeOverlaps(activities);
         break;
       }
 
@@ -775,24 +796,107 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
 }
 
 /**
+ * AUTOMATIC OVERLAP RESOLUTION
+ * Intelligently fixes overlapping activities by adjusting start/end times
+ * while preserving activity durations where possible
+ */
+function resolveTimeOverlaps(activities: any[]): any[] {
+  if (activities.length < 2) return activities;
+  
+  console.log(`[overlap-resolver] Checking ${activities.length} activities for overlaps`);
+  
+  for (let i = 1; i < activities.length; i++) {
+    const prev = activities[i - 1];
+    const curr = activities[i];
+    
+    const prevEnd = normalizeTimeForSorting(prev.end || prev.endTime || '00:00');
+    const currStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
+    
+    if (currStart < prevEnd) {
+      // OVERLAP DETECTED - Fix it
+      const prevName = prev.title || prev.name || prev.activity?.name || 'Activity';
+      const currName = curr.title || curr.name || curr.activity?.name || 'Activity';
+      
+      console.log(`[overlap-resolver] FIXING: "${prevName}" (ends ${convertTo12Hour(prevEnd)}) overlaps "${currName}" (starts ${convertTo12Hour(currStart)})`);
+      
+      // Strategy: Move current activity to start right after previous ends
+      const newStartTime12 = convertTo12Hour(prevEnd);
+      const newStart24 = prevEnd;
+      
+      // Calculate original duration
+      const originalEnd = normalizeTimeForSorting(curr.end || curr.endTime || '00:00');
+      const originalStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
+      const durationMinutes = getTimeDiffMinutes(originalStart, originalEnd);
+      
+      // Calculate new end time maintaining duration
+      const newEnd24 = addMinutesToTime(newStart24, Math.max(durationMinutes, 60)); // Minimum 1 hour
+      const newEndTime12 = convertTo12Hour(newEnd24);
+      
+      // Update the current activity
+      curr.start = newStartTime12;
+      curr.startTime = newStartTime12;
+      curr.end = newEndTime12;
+      curr.endTime = newEndTime12;
+      curr.timeBlock = `${newStartTime12} - ${newEndTime12}`;
+      
+      console.log(`[overlap-resolver] ✓ FIXED: "${currName}" moved to ${newStartTime12} - ${newEndTime12}`);
+    }
+  }
+  
+  return activities;
+}
+
+/**
+ * Add minutes to a 24-hour time string
+ */
+function addMinutesToTime(time24: string, minutes: number): string {
+  const [hour, min] = time24.split(':').map(Number);
+  let totalMinutes = hour * 60 + min + minutes;
+  
+  // Cap at 10 PM (22:00) to avoid midnight shifts
+  if (totalMinutes > 22 * 60) totalMinutes = 22 * 60;
+  
+  const newHour = Math.floor(totalMinutes / 60);
+  const newMin = totalMinutes % 60;
+  return `${newHour.toString().padStart(2, '0')}:${newMin.toString().padStart(2, '0')}`;
+}
+
+/**
  * Extract requested end time from user feedback
- * Examples: "end by 9pm" → "21:00", "make it end by 8" → "20:00"
+ * Examples: "end by 9pm" → "21:00", "make it end earlier around 6pm" → "18:00"
  */
 function extractRequestedEndTime(feedback: string): string | null {
   if (!feedback) return null;
   
   const lowerFeedback = feedback.toLowerCase();
+  console.log(`[extract-time] Analyzing feedback: "${feedback}"`);
   
-  // Patterns: "end by 9pm", "end by 9", "finish by 8pm", "done by 7"
+  // Enhanced patterns to catch various timing modification requests
   const patterns = [
+    // Direct patterns: "end by 9pm", "finish by 8pm"
     /end\s+by\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
     /finish\s+by\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
     /done\s+by\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
+    
+    // "earlier" patterns: "end earlier around 6pm", "make it end earlier, around 6"
+    /end\s+earlier.*?around\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
+    /earlier.*?around\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
+    
+    // "make it" patterns: "make it end by 6pm", "make it finish around 8"
+    /make\s+it\s+(?:end|finish).*?(?:by|around)\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
+    
+    // "around X" patterns: "around 6pm", "around 8 o'clock"
+    /around\s+(\d{1,2}):?(\d{2})?\s*(?:o'?clock)?\s*(am|pm)?/i,
+    
+    // More natural patterns: "6pm would be better", "by 7pm at the latest"
+    /(?:by|before)\s+(\d{1,2}):?(\d{2})?\s*(am|pm)?/i,
   ];
   
   for (const pattern of patterns) {
+    console.log(`[extract-time] Testing pattern: ${pattern.source}`);
     const match = lowerFeedback.match(pattern);
     if (match) {
+      console.log(`[extract-time] Pattern matched:`, match);
       let hour = parseInt(match[1], 10);
       const min = match[2] ? parseInt(match[2], 10) : 0;
       const period = match[3] ? match[3].toUpperCase() : null;
@@ -808,10 +912,13 @@ function extractRequestedEndTime(feedback: string): string | null {
         hour = 0;
       }
       
-      return `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+      const result = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+      console.log(`[extract-time] ✓ FOUND: "${feedback}" → ${result} (${convertTo12Hour(result)})`);
+      return result;
     }
   }
   
+  console.log(`[extract-time] NO TIME FOUND in: "${feedback}"`);
   return null;
 }
 
@@ -819,20 +926,40 @@ function extractRequestedEndTime(feedback: string): string | null {
  * Get the end time of the last activity in the plan
  */
 function getFinalActivityEndTime(plan: TripPlan): string | null {
-  if (!plan.days || plan.days.length === 0) return null;
+  if (!plan.days || plan.days.length === 0) {
+    console.log(`[get-end-time] No days in plan`);
+    return null;
+  }
   
   // Get last day
   const lastDay = plan.days[plan.days.length - 1];
-  const activities = lastDay.blocks || [];
+  const activities = lastDay.blocks || lastDay.activities || [];
   
-  if (activities.length === 0) return null;
+  console.log(`[get-end-time] Found ${activities.length} activities in last day`);
+  
+  if (activities.length === 0) {
+    console.log(`[get-end-time] No activities in last day`);
+    return null;
+  }
   
   // Get last activity
   const lastActivity = activities[activities.length - 1];
-  const endTime = lastActivity.end;
+  const endTime = lastActivity.end || lastActivity.endTime || lastActivity.activity?.endTime;
   
-  if (!endTime) return null;
+  console.log(`[get-end-time] Last activity:`, {
+    title: lastActivity.title || lastActivity.name || lastActivity.activity?.name,
+    end: lastActivity.end,
+    endTime: lastActivity.endTime,
+    calculated: endTime
+  });
   
-  return normalizeTimeForSorting(endTime);
+  if (!endTime) {
+    console.log(`[get-end-time] No end time found in last activity`);
+    return null;
+  }
+  
+  const result = normalizeTimeForSorting(endTime);
+  console.log(`[get-end-time] ✓ Plan ends at: ${result} (${convertTo12Hour(result)})`);
+  return result;
 }
 

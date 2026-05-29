@@ -136,7 +136,8 @@ CORRECT: "Asiate at Mandarin Oriental"
 - Activities past closing times
 - Overlapping activities
 
-**Solution:** Code-based validation that auto-fixes time issues
+**Solution:** Code-based validation that auto-fixes time issues 
+Bidyut -> Need to fix by AI
 
 **Implementation:**
 - **File:** `trip-planner-server/src/utils/force-timeline.ts`
