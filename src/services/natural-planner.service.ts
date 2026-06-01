@@ -23,6 +23,108 @@ import {
   getPartnerValidationSummary 
 } from "./partner-validation.service.js";
 import { addMapLinksToTripPlan } from "../utils/google-maps.js";
+import { extractClosingTime, normalizeTimeForSorting, convertTo12Hour, subtractMinutes, getTimeDiffMinutes } from "../utils/time-utils.js";
+import { forceValidTimeline } from "../utils/force-timeline.js";
+
+/**
+ * Validate closing times for all activities in a plan
+ * Auto-corrects activities that go past closing time
+ */
+async function validateClosingTimes(plan: any): Promise<any> {
+  if (!plan?.days) return plan;
+  
+  console.log('[closing-time-validation] Validating initial plan for closing time violations...');
+  
+  let violationsFixed = 0;
+  
+  for (const day of plan.days) {
+    const activities = day.blocks || day.activities || [];
+    
+    for (const activity of activities) {
+      const activityData = activity.activity;
+      if (!activityData || !activityData.availability) continue;
+      
+      const activityName = activityData.name || activity.title || 'Unknown';
+      const startTime = activity.startTime || activity.start;
+      const endTime = activity.endTime || activity.end;
+      
+      if (!startTime || !endTime) continue;
+      
+      // VALIDATE: End time must be after start time
+      const startTime24 = normalizeTimeForSorting(startTime);
+      const endTime24 = normalizeTimeForSorting(endTime);
+      
+      if (endTime24 <= startTime24) {
+        // CRITICAL ERROR: Activity ends before/at start time!
+        const issue = endTime24 < startTime24 ? 'ends before start' : 'ends at same time as start';
+        console.error(`[closing-time-validation] BACKWARDS TIME: "${activityName}" ${startTime}-${endTime} (${issue}!)`);
+        
+        // AUTO-FIX: Assume it's a same-day activity
+        // If it's PM to AM (like "2:00 PM - 4:00 AM"), assume they meant PM to PM
+        const startHasAM = startTime.includes('AM');
+        const endHasAM = endTime.includes('AM');
+        const startHasPM = startTime.includes('PM');
+        const endHasPM = endTime.includes('PM');
+        
+        let fixedEnd12: string;
+        
+        if (startHasPM && endHasAM) {
+          // Case: "2:00 PM - 4:00 AM" → Fix to "2:00 PM - 4:00 PM"
+          fixedEnd12 = endTime.replace('AM', 'PM');
+          console.log(`[closing-time-validation] → Detected PM-to-AM crossing, fixing AM to PM`);
+        } else {
+          // Case: Time is just backwards (like "9:30 PM - 8:00 PM")
+          // Fix: Add 2 hours to start time
+          const [startHour, startMin] = startTime24.split(':').map(Number);
+          let endHour = startHour + 2;
+          if (endHour >= 24) endHour = 23; // Cap at 11pm
+          const fixedEnd24 = `${endHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+          fixedEnd12 = convertTo12Hour(fixedEnd24);
+          console.log(`[closing-time-validation] → Adding 2 hours to create valid end time`);
+        }
+        
+        activity.endTime = fixedEnd12;
+        activity.end = fixedEnd12;
+        if (activity.timeBlock) {
+          activity.timeBlock = `${startTime} - ${fixedEnd12}`;
+        }
+        
+        violationsFixed++;
+        console.log(`[closing-time-validation] ✓ AUTO-FIXED BACKWARDS TIME: "${activityName}" now ${startTime}-${fixedEnd12}`);
+        continue; // Skip closing time check for this activity
+      }
+      
+      const closingTime = extractClosingTime(activityData.availability);
+      if (!closingTime) continue; // Open 24/7 or couldn't parse
+      
+      if (endTime24 > closingTime) {
+        // VIOLATION: Activity ends after closing
+        const closingTime12 = convertTo12Hour(closingTime);
+        const minutesOver = getTimeDiffMinutes(closingTime, endTime24);
+        
+        console.warn(`[closing-time-validation] "${activityName}" ends at ${endTime} but closes at ${closingTime12} (${minutesOver} min over)`);
+        
+        // AUTO-FIX: Adjust end time to closing time
+        activity.endTime = closingTime12;
+        activity.end = closingTime12;
+        if (activity.timeBlock) {
+          activity.timeBlock = `${startTime} - ${closingTime12}`;
+        }
+        
+        violationsFixed++;
+        console.log(`[closing-time-validation] ✓ AUTO-FIXED: "${activityName}" now ends at ${closingTime12}`);
+      }
+    }
+  }
+  
+  if (violationsFixed > 0) {
+    console.log(`[closing-time-validation] Fixed ${violationsFixed} closing time violation(s)`);
+  } else {
+    console.log(`[closing-time-validation] No violations found - all activities respect business hours`);
+  }
+  
+  return plan;
+}
 /**
  * Validate and enrich partner information in the new schema format
  * Ensures AI-modified partner data is replaced with authentic database data
@@ -117,7 +219,7 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
           }
           
           if (partnerData) {
-            console.log(`[partner-validation] ✅ Found partner: ${partnerData.name} (${partnerData.id})`);
+            console.log(`[partner-validation] Found partner: ${partnerData.name} (${partnerData.id})`);
             
             // Create enriched activity preserving AI data but overriding with authentic partner data
             const enrichedActivity = {
@@ -145,7 +247,7 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
             
             console.log(`[partner-validation] 🔄 Enriched '${partnerData.name}' with authentic coordinates: lat=${partnerData.latitude}, lng=${partnerData.longitude}`);
           } else {
-            console.warn(`[partner-validation] ⚠️ No match found for partner: '${activityData.provider || activityData.name}' (ID: ${activityData.id})`);
+            console.warn(`[partner-validation] No match found for partner: '${activityData.provider || activityData.name}' (ID: ${activityData.id})`);
             console.warn(`[partner-validation] Available partners: ${Array.from(partnerLookup.keys()).filter(k => typeof k === 'string').join(', ')}`);
           }
         }
@@ -159,7 +261,7 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
     console.log(`[partner-validation] Total available partners in database: ${restaurants.length + activities.length + cabs.length + games.length}`);
     
     if (partnersFound > partnersEnriched) {
-      console.warn(`[partner-validation] ⚠️ ${partnersFound - partnersEnriched} partners could not be matched with database records`);
+      console.warn(`[partner-validation] ${partnersFound - partnersEnriched} partners could not be matched with database records`);
     }
     
   } catch (error) {
@@ -171,7 +273,7 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
 
 
 /**
- * ARIA: Build the AI prompt for natural language trip planning with optional personalization
+ * Build the AI prompt for natural language trip planning with optional personalization
  * 
  * Constructs the complete prompt sent to the AI, including:
  * - Available destinations and keywords
@@ -191,7 +293,6 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
  * @param suggestedKeywords - Keywords extracted from prompt
  * @param userProfile - Optional user profile for personalized planning
  * @returns Complete prompt string for AI with all context and instructions
- * @author Aria
  */
 function buildNaturalPlanPrompt(
   prompt: string,
@@ -206,7 +307,7 @@ function buildNaturalPlanPrompt(
   const keywordHint =
     suggestedKeywords.length > 0 ? suggestedKeywords.join(", ") : "(none)";
 
-  // ARIA: User Profile Personalization Integration
+  // User Profile Personalization Integration
   // If a user profile is provided, inject it into the AI prompt with strong constraints.
   // This makes the AI consider dietary restrictions, accessibility, budget, travel style,
   // and preferences (crowds, local experiences, fitness level) when generating the plan.
@@ -232,11 +333,19 @@ CRITICAL INSTRUCTIONS:
 ` : "";
 
   const catalogHint = isCatalogMcpEnabled()
-    ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use realistic provider names."
+    ? " IMPORTANT: You MUST call trip-catalog MCP tools (get_catalog_bundle, list_restaurants, list_cabs, list_activities, list_games) FIRST to get real partner data for the destination. Use ONLY the exact partner names from the MCP tool results as the 'provider' field in activities. For partner activities: set isPartner=true, provider=<exact partner name>. For non-partner activities: set isPartner=false and use REAL, EXISTING businesses and attractions in the destination city. Research and include actual restaurants, museums, galleries, cafes, and activities that visitors can find and book. Use accurate names and details for real places that exist in the real world."
+    // ORIGINAL (commented for team discussion): "For non-partner activities: set isPartner=false and use realistic provider names."
     : "";
 
 
-  return `Parse the user message and build a complete trip schedule.${catalogHint} ${profileContext} Reply with JSON only — no markdown.
+  return `Parse the user message and build a complete trip schedule.${catalogHint} ${profileContext} 
+
+WARNING **CRITICAL TIME RULE**: ALL activities MUST be on the same day. End time MUST be after start time.
+   - GOOD: "2:00 PM - 4:00 PM" (PM to PM) ✓
+   - WRONG: "2:00 PM - 4:00 AM" (PM to AM - crosses midnight!) ✗
+   - WRONG: "9:30 PM - 8:00 PM" (end before start!) ✗
+
+Reply with JSON only — no markdown.
 
 Schema:
 {
@@ -253,9 +362,9 @@ Schema:
     "day": number (1, 2, 3...),
     "date": string (formatted as "Month DD, YYYY"),
     "activities": [{
-      "timeBlock": string ("H:MM AM/PM - H:MM AM/PM"),
-      "startTime": string ("H:MM AM/PM"), 
-      "endTime": string ("H:MM AM/PM"),
+      "timeBlock": string ("H:MM AM/PM - H:MM AM/PM"),  // WARNING CRITICAL: End time MUST be after start time! NO crossing midnight! (e.g. "2:00 PM - 4:00 PM" is GOOD, "2:00 PM - 4:00 AM" is WRONG!)
+      "startTime": string ("H:MM AM/PM"),  // Must be before endTime
+      "endTime": string ("H:MM AM/PM"),  // Must be after startTime AND same day (no AM after PM!)
       "type": "restaurant"|"attraction"|"museum"|"activity"|"transportation",
       "isPartner": boolean,
       "addFromOurRecommendation": boolean,
@@ -359,11 +468,11 @@ ${prompt}`;
 /**
  * Natural language: ONE AI call (parse + plan). Catalog partner data via MCP tools, not local enrich.
  * 
- * ARIA: Enhanced with keyword detection and programmatic map link generation.
+ * Enhanced with keyword detection and programmatic map link generation.
  * Detects if user wants map links (keywords: map, link, route, directions, google maps).
  * AI generates coordinates, then custom utility function builds clean per-day URLs.
  * 
- * ARIA: Enhanced with user profile personalization (Feature 2 - CodeFest).
+ * Enhanced with user profile personalization for CodeFest.
  * When a userId is provided, loads the corresponding user profile from data/user-profiles.json
  * and injects it into the AI prompt for personalized trip planning. The AI will:
  * - Filter restaurants by dietary restrictions (vegetarian, vegan, gluten-free, etc.)
@@ -377,7 +486,6 @@ ${prompt}`;
  * @param prompt - User's natural language request
  * @param userId - Optional user ID to select specific profile (no profile applied if omitted)
  * @returns Trip request and personalized plan (or generic plan if no userId)
- * @author Aria (Map Links + User Profiles)
  */
 export async function planFromNaturalLanguage(
   prompt: string,
@@ -386,16 +494,27 @@ export async function planFromNaturalLanguage(
   const destinations = await loadDestinations();
   const suggestedKeywords = extractPromptKeywords(prompt);
 
-  // ARIA: Load user profile ONLY if userId is explicitly provided
+  // Load user profile if userId is explicitly provided
   // No profile personalization applied by default - keeps plans generic
   // In production, this would be based on authenticated user session
   let userProfile: UserProfile | undefined;
   if (userId) {
     const userProfiles = await loadUserProfiles();
     userProfile = userProfiles.find(p => p.id === userId);
+    console.log('[natural-planner] User profile loaded:', userProfile ? `${userProfile.name} (${userId})` : 'NOT FOUND');
+    if (userProfile) {
+      console.log('[natural-planner] Profile details:', {
+        travelStyle: userProfile.travelStyle,
+        budgetLevel: userProfile.budgetLevel,
+        fitnessLevel: userProfile.preferences.fitnessLevel,
+        dietaryRestrictions: userProfile.dietaryRestrictions,
+      });
+    }
+  } else {
+    console.log('[natural-planner] No userId provided - generating generic plan');
   }
 
-  // ARIA: Keyword detection for map link generation
+  // Keyword detection for map link generation
   // Check if user wants map links (only generates if explicitly requested)
   const lowerPrompt = prompt.toLowerCase();
   const userWantsMap = lowerPrompt.includes("map") || 
@@ -409,8 +528,13 @@ export async function planFromNaturalLanguage(
       prompt,
       destinations,
       suggestedKeywords,
-      userProfile,  // ARIA: Pass user profile for personalized planning
+      userProfile,  // Pass user profile for personalized planning
     );
+    
+    if (userProfile) {
+      console.log('[natural-planner] Using personalized prompt for:', userProfile.name);
+    }
+    
     const raw = await runOpenAiPrompt(naturalPlanPrompt);
     
     // AI returns the new schema directly - parse and validate partners
@@ -419,9 +543,17 @@ export async function planFromNaturalLanguage(
     // Validate and enrich partner information
     const validatedResult = await validateAndEnrichNewSchemaPartners(result);
     
-    // ARIA: Programmatic map link generation (Feature 1 - CodeFest)
+    // CLOSING TIME VALIDATION (Phase 1 - Initial Plans)
+    // Validate that all activities respect business hours
+    // CRITICAL: Force timeline to be valid (fix backwards times, overlaps)
+    const timelineFixed = forceValidTimeline(validatedResult);
+    
+    // Then validate closing times
+    const closingTimeValidatedResult = await validateClosingTimes(timelineFixed);
+    
+    // Programmatic map link generation (CodeFest Feature)
     // Add per-day Google Maps links if user requested map in their prompt
-    const resultWithMapLinks = addMapLinksToTripPlan(validatedResult, userWantsMap);
+    const resultWithMapLinks = addMapLinksToTripPlan(closingTimeValidatedResult, userWantsMap);
     
     return resultWithMapLinks;
 

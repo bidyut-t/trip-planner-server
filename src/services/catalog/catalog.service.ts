@@ -89,7 +89,7 @@ export async function loadPartnerGames(city?: string): Promise<PartnerItem[]> {
 }
 
 /**
- * ARIA: Load user profiles from JSON file
+ * Load user profiles from JSON file
  * 
  * Follows the same pattern as partner data loading.
  * Profiles contain dietary restrictions, accessibility needs, budget level,
@@ -102,7 +102,7 @@ export async function loadUserProfiles(): Promise<UserProfile[]> {
 }
 
 /**
- * ARIA: Get a specific user profile by ID
+ * Get a specific user profile by ID
  * 
  * @param userId - User profile ID (e.g., "user-001")
  * @returns User profile if found, undefined otherwise

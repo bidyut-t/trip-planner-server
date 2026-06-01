@@ -17,6 +17,13 @@ app.use(cors({
   credentials: true,
 }));
 
+// Enable CORS for frontend (localhost:3002)
+app.use(cors({
+  origin: ['http://localhost:3002', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true,
+}));
+
 app.use(express.json());
 
 app.get("/health", (_req, res) => {
