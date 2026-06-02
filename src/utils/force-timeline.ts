@@ -14,30 +14,59 @@ export function forceValidTimeline(plan: any): any {
     
     console.log(`[force-timeline] Fixing ${activities.length} activities for day ${day.day}`);
     
-    // Step 1: Fix backwards times (PM to AM, or end before start)
+    // Step 1: Fix backwards times (PM to AM, or end before start) AND unreasonably long activities
     for (const activity of activities) {
       const startTime = activity.startTime || activity.start;
       const endTime = activity.endTime || activity.end;
+      const activityName = activity.title || activity.name || activity.activity?.name || 'Activity';
+      const activityType = activity.type || activity.activity?.type || 'unknown';
       
       if (!startTime || !endTime) continue;
       
       const start24 = normalizeTimeForSorting(startTime);
       const end24 = normalizeTimeForSorting(endTime);
       
-      if (end24 <= start24 || (startTime.includes('PM') && endTime.includes('AM'))) {
-        // BACKWARDS! Fix it
-        const [startHour, startMin] = start24.split(':').map(Number);
-        let newEndHour = startHour + 2; // Add 2 hours
-        if (newEndHour >= 24) newEndHour = 23;
+      // Calculate duration in minutes
+      const [startHour, startMin] = start24.split(':').map(Number);
+      const [endHour, endMin] = end24.split(':').map(Number);
+      const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+      
+      // CRITICAL FIX: Detect PM to AM crossings (like "2:00 PM - 12:00 AM")
+      const isPMtoAM = startTime.includes('PM') && endTime.includes('AM');
+      
+      // CRITICAL FIX: Detect unreasonably long activities (> 4 hours for most things)
+      const maxDuration = activityType === 'museum' || activityType === 'activity' ? 240 : 150; // 4 hours for museums, 2.5 hours for others
+      const isTooLong = durationMinutes > maxDuration || durationMinutes < 0;
+      
+      if (end24 <= start24 || isPMtoAM || isTooLong) {
+        // BACKWARDS or TOO LONG! Fix it with reasonable duration
+        let reasonableDuration = 120; // Default 2 hours
         
-        const newEnd24 = `${newEndHour.toString().padStart(2, '0')}:${startMin.toString().padStart(2, '0')}`;
+        // Type-specific durations
+        if (activityType === 'restaurant') reasonableDuration = 90; // 1.5 hours
+        if (activityType === 'museum' || activityType === 'attraction') reasonableDuration = 150; // 2.5 hours
+        if (activityType === 'activity') reasonableDuration = 180; // 3 hours
+        if (activityType === 'transportation') reasonableDuration = 30; // 30 min
+        
+        const newEndMinutes = (startHour * 60 + startMin) + reasonableDuration;
+        let newEndHour = Math.floor(newEndMinutes / 60);
+        let newEndMin = newEndMinutes % 60;
+        
+        // Cap at 10 PM (22:00) to avoid midnight
+        if (newEndHour >= 22) {
+          newEndHour = 22;
+          newEndMin = 0;
+        }
+        
+        const newEnd24 = `${newEndHour.toString().padStart(2, '0')}:${newEndMin.toString().padStart(2, '0')}`;
         const newEnd12 = convertTo12Hour(newEnd24);
         
         activity.endTime = newEnd12;
         activity.end = newEnd12;
         activity.timeBlock = `${startTime} - ${newEnd12}`;
         
-        console.log(`[force-timeline] ✓ Fixed backwards time: ${startTime}-${endTime} → ${startTime}-${newEnd12}`);
+        const reason = isPMtoAM ? 'PM-to-AM crossing' : isTooLong ? `too long (${Math.round(durationMinutes/60)}hrs)` : 'backwards';
+        console.log(`[force-timeline] ✓ Fixed "${activityName}" (${reason}): ${startTime}-${endTime} → ${startTime}-${newEnd12}`);
       }
     }
     

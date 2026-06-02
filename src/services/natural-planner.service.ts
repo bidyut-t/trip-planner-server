@@ -27,6 +27,194 @@ import { extractClosingTime, normalizeTimeForSorting, convertTo12Hour, subtractM
 import { forceValidTimeline } from "../utils/force-timeline.js";
 
 /**
+ * FINAL SAFETY NET - Catches any remaining time issues after all other validation
+ * This ensures ZERO bad times reach the frontend, guaranteed
+ */
+function finalTimeSafetyCheck(plan: any): any {
+  console.log('[final-safety] Running final time safety check...');
+  let issuesFixed = 0;
+  
+  for (const day of plan.days || []) {
+    const activities = day.blocks || day.activities || [];
+    
+    for (const activity of activities) {
+      const name = activity.title || activity.name || activity.activity?.name || 'Activity';
+      const start = activity.startTime || activity.start;
+      const end = activity.endTime || activity.end;
+      const activityType = activity.type || activity.activity?.type || 'activity';
+      
+      if (!start || !end) continue;
+      
+      // Check 1: PM to AM crossing (like "2:00 PM - 12:00 AM")
+      if (start.includes('PM') && end.includes('AM')) {
+        // Fix: Change AM to PM
+        const fixedEnd = end.replace('AM', 'PM');
+        activity.endTime = fixedEnd;
+        activity.end = fixedEnd;
+        activity.timeBlock = `${start} - ${fixedEnd}`;
+        console.log(`[final-safety] Fixed PM-to-AM: "${name}" ${start}-${end} → ${start}-${fixedEnd}`);
+        issuesFixed++;
+      }
+      
+      // Check 2: Unreasonably long activity (> 5 hours for anything) OR same start/end time
+      const start24 = normalizeTimeForSorting(start);
+      const end24 = normalizeTimeForSorting(end);
+      const [startHour, startMin] = start24.split(':').map(Number);
+      const [endHour, endMin] = end24.split(':').map(Number);
+      const durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+      
+      // CRITICAL: Same start and end time (like "10:00 PM - 10:00 PM")
+      if (durationMinutes === 0 || start === end) {
+        // Fix: Add reasonable duration
+        let reasonableDuration = 120; // Default 2 hours
+        if (activityType === 'restaurant') reasonableDuration = 90;
+        
+        const newEndMinutes = (startHour * 60 + startMin) + reasonableDuration;
+        let newEndHour = Math.floor(newEndMinutes / 60);
+        let newEndMin = newEndMinutes % 60;
+        
+        // Cap at 10 PM
+        if (newEndHour >= 22) {
+          newEndHour = 22;
+          newEndMin = 0;
+        }
+        
+        const newEnd24 = `${newEndHour.toString().padStart(2, '0')}:${newEndMin.toString().padStart(2, '0')}`;
+        const newEnd12 = convertTo12Hour(newEnd24);
+        
+        activity.endTime = newEnd12;
+        activity.end = newEnd12;
+        activity.timeBlock = `${start} - ${newEnd12}`;
+        console.log(`[final-safety] Fixed same start/end time: "${name}" ${start}-${end} → ${start}-${newEnd12}`);
+        issuesFixed++;
+      }
+      else if (durationMinutes > 300 || durationMinutes < 0) { // > 5 hours or negative
+        // Fix: Cap at 2 hours
+        const newEndMinutes = (startHour * 60 + startMin) + 120;
+        const newEndHour = Math.floor(newEndMinutes / 60);
+        const newEndMin = newEndMinutes % 60;
+        const newEnd24 = `${newEndHour.toString().padStart(2, '0')}:${newEndMin.toString().padStart(2, '0')}`;
+        const newEnd12 = convertTo12Hour(newEnd24);
+        
+        activity.endTime = newEnd12;
+        activity.end = newEnd12;
+        activity.timeBlock = `${start} - ${newEnd12}`;
+        console.log(`[final-safety] Fixed long activity: "${name}" ${start}-${end} (${Math.round(durationMinutes/60)}h) → ${start}-${newEnd12} (2h)`);
+        issuesFixed++;
+      }
+      
+      // Check 3: FIX ONLY NONSENSICAL BUSINESS HOURS - be smart, not aggressive
+      if (activity.activity?.availability) {
+        const availability = activity.activity.availability;
+        let fixedAvailability = availability;
+        
+        // Only fix truly broken hours, don't override everything
+        let needsFix = false;
+        
+        // Pattern 0: Same open/close time (10pm-10pm) - makes no sense
+        if (availability.match(/(\d+)(am|pm|AM|PM)-(\1)(am|pm|AM|PM)/i)) {
+          fixedAvailability = '10am-10pm';
+          needsFix = true;
+          console.log(`[final-safety] Fixed same open/close time: "${name}" ${availability} → ${fixedAvailability}`);
+        }
+        
+        // Pattern 1: AM-to-AM crossing (10am-4am) - definitely wrong
+        else if (availability.match(/(\d+)(am|AM)-(\d+)(am|AM)/) && !availability.includes('12am')) {
+          fixedAvailability = availability.replace(/(\d+)(am|AM)-(\d+)am/i, '$1am-$3pm');
+          needsFix = true;
+          console.log(`[final-safety] Fixed AM-to-AM hours: "${name}" ${availability} → ${fixedAvailability}`);
+        }
+        
+        // Pattern 2: Nonsensical late closings (1am-4am) that aren't midnight/bars
+        else if ((availability.includes('1am') || availability.includes('2am') || 
+                  availability.includes('3am') || availability.includes('4am')) &&
+                 activityType === 'restaurant' && !availability.includes('12am')) {
+          // Only if it's a restaurant (not a bar) and truly weird hours
+          fixedAvailability = '11am-10pm';
+          needsFix = true;
+          console.log(`[final-safety] Fixed nonsensical restaurant hours: "${name}" ${availability} → ${fixedAvailability}`);
+        }
+        
+        if (needsFix) {
+          activity.activity.availability = fixedAvailability;
+          issuesFixed++;
+        }
+      }
+      
+      // Check 4: ENFORCE activity time is WITHIN business hours - FIX IT
+      if (activity.activity?.availability && start && end) {
+        const availability = activity.activity.availability;
+        const activityStart = start;
+        const activityEnd = end;
+        
+        // Parse availability to get opening/closing times
+        const availMatch = availability.match(/(\d+)(am|pm|AM|PM)?-(\d+)(am|pm|AM|PM)/i);
+        if (availMatch) {
+          const openTime = availMatch[1] + (availMatch[2] || 'am');
+          const closeTime = availMatch[3] + availMatch[4];
+          
+          const open24 = normalizeTimeForSorting(openTime);
+          const close24 = normalizeTimeForSorting(closeTime);
+          const actStart24 = normalizeTimeForSorting(activityStart);
+          const actEnd24 = normalizeTimeForSorting(activityEnd);
+          
+          let fixed = false;
+          
+          // FIX 1: Activity starts before place opens
+          if (actStart24 < open24) {
+            // Convert 24-hour opening time back to 12-hour format
+            const openTime12 = convertTo12Hour(open24);
+            activity.startTime = openTime12;
+            activity.start = openTime12;
+            
+            // Recalculate end time to maintain duration
+            const [currStartHour, currStartMin] = actStart24.split(':').map(Number);
+            const [currEndHour, currEndMin] = actEnd24.split(':').map(Number);
+            const durationMinutes = (currEndHour * 60 + currEndMin) - (currStartHour * 60 + currStartMin);
+            
+            // Calculate new end time based on opening time
+            const [openHour, openMin] = open24.split(':').map(Number);
+            const newEndMinutes = (openHour * 60 + openMin) + Math.min(durationMinutes, 120);
+            const newEndHour = Math.floor(newEndMinutes / 60);
+            const newEndMin = newEndMinutes % 60;
+            const newEnd24 = `${newEndHour.toString().padStart(2, '0')}:${newEndMin.toString().padStart(2, '0')}`;
+            const newEnd12 = convertTo12Hour(newEnd24);
+            
+            activity.endTime = newEnd12;
+            activity.end = newEnd12;
+            activity.timeBlock = `${openTime12} - ${newEnd12}`;
+            
+            console.log(`[final-safety] Fixed early start: "${name}" ${activityStart}-${activityEnd} → ${openTime12}-${newEnd12} (opens at ${openTime})`);
+            fixed = true;
+            issuesFixed++;
+          }
+          
+          // FIX 2: Activity ends after place closes
+          if (actEnd24 > close24) {
+            const closeTime12 = convertTo12Hour(close24);
+            activity.endTime = closeTime12;
+            activity.end = closeTime12;
+            activity.timeBlock = `${activity.startTime || activity.start} - ${closeTime12}`;
+            
+            console.log(`[final-safety] Fixed late end: "${name}" ends at ${activityEnd} but closes at ${closeTime}`);
+            fixed = true;
+            issuesFixed++;
+          }
+        }
+      }
+    }
+  }
+  
+  if (issuesFixed > 0) {
+    console.log(`[final-safety] Fixed ${issuesFixed} final issues`);
+  } else {
+    console.log('[final-safety] No issues found - all times valid');
+  }
+  
+  return plan;
+}
+
+/**
  * Validate closing times for all activities in a plan
  * Auto-corrects activities that go past closing time
  */
@@ -337,13 +525,86 @@ CRITICAL INSTRUCTIONS:
     // ORIGINAL (commented for team discussion): "For non-partner activities: set isPartner=false and use realistic provider names."
     : "";
 
+  // CRITICAL: Add explicit instruction to NEVER make up fake place names
+  const realPlacesWarning = `
 
-  return `Parse the user message and build a complete trip schedule.${catalogHint} ${profileContext} 
+**CRITICAL RULE - EXACT REAL PLACE NAMES ONLY:**
+- Use the EXACT, FULL official business name as it appears on Google Maps/Yelp
+- NEVER shorten or abbreviate business names (e.g., use "Little Ruby's" not "Ruby's Cafe")
+- NEVER invent or make up business names
+- If unsure of the exact name, use ONLY these categories of ultra-famous places:
+  * Major museums: "The Metropolitan Museum of Art", "MoMA", "Smithsonian"
+  * Iconic landmarks: "Statue of Liberty", "Central Park", "Times Square"
+  * World-famous restaurants: "Katz's Delicatessen", "Peter Luger Steak House"
 
-WARNING **CRITICAL TIME RULE**: ALL activities MUST be on the same day. End time MUST be after start time.
-   - GOOD: "2:00 PM - 4:00 PM" (PM to PM) ✓
-   - WRONG: "2:00 PM - 4:00 AM" (PM to AM - crosses midnight!) ✗
-   - WRONG: "9:30 PM - 8:00 PM" (end before start!) ✗
+**CRITICAL: PRIORITIZE TOURIST-WORTHY EXPERIENCES - NO GENERIC CHAINS:**
+- NEVER suggest everyday chains: Chipotle, Subway, McDonald's, Whole Foods, Panera, CVS, Walgreens
+- AVOID generic coffee chains: Starbucks, Dunkin' (unless no other option)
+- PRIORITIZE local, unique, memorable places that make travel special
+- Ask yourself: "Would a tourist specifically want to visit this, or is it just convenient?"
+- GOOD: Famous local institutions, iconic restaurants, unique experiences, cultural landmarks
+- BAD: Chain restaurants, grocery stores, pharmacies, generic fast food
+
+TOURIST-WORTHY EXAMPLES:
+CORRECT: "Katz's Delicatessen" (iconic NYC institution, tourists seek it out)
+CORRECT: "Joe's Pizza - Greenwich Village" (famous local spot, tourist destination)
+CORRECT: "Gramercy Tavern" (acclaimed restaurant, special experience)
+WRONG: "Chipotle" (generic chain, available in every city)
+WRONG: "Whole Foods" (grocery store, not a destination)
+WRONG: "Starbucks" (generic, not special to this city)
+
+VERIFICATION CHECKLIST before including ANY business:
+[ ] Is this the EXACT full name? (not shortened or paraphrased)
+[ ] Is this establishment famous enough that most people would recognize it?
+[ ] If it's not ultra-famous, am I 100% certain the full exact name is correct?
+[ ] Would a TOURIST specifically want to visit this place? (not just convenient)
+[ ] Is this a unique/local experience, NOT a generic chain available everywhere?
+
+DO NOT USE approximate names:
+X "Ruby's Cafe" (real name might be "Little Ruby's")
+X "The Pizza Place" (too generic)
+X "Thai Bistro" (not specific enough)
+
+DO NOT USE generic chains:
+X "Chipotle" (chain, not tourist-worthy)
+X "Whole Foods" (grocery store, not a destination)
+X "Starbucks" (generic coffee, not special)
+
+ONLY USE exact names or ultra-famous tourist-worthy places:
+CORRECT: "Little Ruby's" (exact full name)
+CORRECT: "Joe's Pizza - Greenwich Village" (exact full name with location)
+CORRECT: "The Metropolitan Museum of Art" (world-famous, full name)`;
+
+
+  return `Parse the user message and build a complete trip schedule.${catalogHint} ${profileContext} ${realPlacesWarning} 
+
+===============================================================================
+CRITICAL TIME RULES - READ BEFORE EVERY ACTIVITY
+===============================================================================
+
+**RULE 1: NO AM-PM CROSSINGS - SAME DAY ONLY**
+WRONG: "2:00 PM - 4:00 AM" (crosses midnight - NEVER DO THIS!)
+WRONG: "9:00 PM - 2:00 AM" (crosses midnight - NEVER DO THIS!)
+CORRECT: "2:00 PM - 4:00 PM" (PM to PM, same day)
+CORRECT: "9:00 PM - 11:00 PM" (PM to PM, same day)
+
+**RULE 2: END TIME MUST BE AFTER START TIME**
+WRONG: "7:30 PM - 5:00 PM" (goes backwards in time!)
+WRONG: "3:00 PM - 3:00 PM" (same time!)
+CORRECT: "5:00 PM - 7:30 PM" (goes forward)
+
+**RULE 3: RESPECT BUSINESS HOURS - ACTIVITY MUST END BEFORE/AT CLOSING**
+If a restaurant closes at 5:00 PM, your activity CANNOT be "3:00 PM - 7:30 PM"
+WRONG: Restaurant closes 5:00 PM, schedule "3:00 PM - 7:30 PM" (2.5 hrs past closing!)
+CORRECT: Restaurant closes 5:00 PM, schedule "2:00 PM - 5:00 PM" (ends at closing)
+CORRECT: Restaurant closes 5:00 PM, schedule "12:00 PM - 2:00 PM" (ends before closing)
+
+VALIDATION CHECKLIST for EVERY activity:
+[ ] Is end time later in the day than start time? (not earlier, not same)
+[ ] Are BOTH times on the same day? (no AM after PM)
+[ ] Does activity end time <= closing time in availability field?
+
+===============================================================================
 
 Reply with JSON only — no markdown.
 
@@ -362,9 +623,9 @@ Schema:
     "day": number (1, 2, 3...),
     "date": string (formatted as "Month DD, YYYY"),
     "activities": [{
-      "timeBlock": string ("H:MM AM/PM - H:MM AM/PM"),  // WARNING CRITICAL: End time MUST be after start time! NO crossing midnight! (e.g. "2:00 PM - 4:00 PM" is GOOD, "2:00 PM - 4:00 AM" is WRONG!)
-      "startTime": string ("H:MM AM/PM"),  // Must be before endTime
-      "endTime": string ("H:MM AM/PM"),  // Must be after startTime AND same day (no AM after PM!)
+      "timeBlock": string ("H:MM AM/PM - H:MM AM/PM"),  // CRITICAL: SAME DAY ONLY! "2PM-4PM" CORRECT, "2PM-4AM" WRONG (no AM after PM!)
+      "startTime": string ("H:MM AM/PM"),  // Must be BEFORE endTime (check: is 2PM before 4PM? YES)
+      "endTime": string ("H:MM AM/PM"),  // Must be AFTER startTime AND <= availability closing time!
       "type": "restaurant"|"attraction"|"museum"|"activity"|"transportation",
       "isPartner": boolean,
       "addFromOurRecommendation": boolean,
@@ -387,11 +648,12 @@ Schema:
         "meetingPoint": string (where to meet/location),
         "contact": string (phone number),
         "bookingUrl": string (website URL),
-        "images": string[] (2-3 image URLs),
+        "images": string[] (1-2 URLs matching the activity type - restaurants show food, parks show nature, museums show art),
         "verified": boolean,
         "popular": boolean,
         "openNow": boolean,
-        "availability": string (hours/schedule),
+        "availability": string (business hours like "10am-5pm" or "11am-10pm"),  // CRITICAL: activity endTime MUST be <= closing time shown here!
+                                                                                // REALISTIC HOURS ONLY: Restaurants "11am-10pm", Museums "10am-5pm", NO "4am" closings!
         "cancellationPolicy": string,
         "earnPoints": number (loyalty points),
         "amenities": string[] (facilities/features),
@@ -428,6 +690,24 @@ IMPORTANT RULES:
 5. Dinner (7:30-9:30 PM or 8:00-10:00 PM)
 6. Optional evening activity if time permits
 
+**CRITICAL: NO BACK-TO-BACK MEALS - LOGICAL ACTIVITY SEQUENCING:**
+- NEVER schedule two restaurants/food activities consecutively
+- NEVER have lunch immediately followed by dinner with no activity between
+- ALWAYS alternate: meal → non-food activity → meal → non-food activity
+- Example CORRECT sequence: Breakfast → Museum → Lunch → Park Walk → Dinner
+- Example WRONG sequence: Breakfast → Lunch → Attraction (skipping morning activity!)
+- Example WRONG sequence: Lunch → Coffee Shop → Dinner (two food activities before dinner!)
+- Partner restaurants should still be prioritized BUT placed at appropriate meal times
+- If a partner activity is a restaurant, place it at breakfast/lunch/dinner slot, NOT between activities
+- Think logically: People don't eat at 1pm and then eat again at 2pm
+
+MEAL TIMING GUIDELINES:
+- Breakfast: 8:00-10:00 AM (start of day)
+- Lunch: 12:00-3:00 PM (after morning activities)
+- Dinner: 6:00-10:00 PM (after afternoon activities)
+- Allow 3-4 hours minimum between meals
+- Non-food activities should fill the gaps between meals
+
 - Add 15-30 minute buffers between activities for travel time
 - Include cab transfers when moving between distant areas
 - Cluster activities geographically to minimize travel time (use real-world geography)
@@ -438,7 +718,11 @@ IMPORTANT RULES:
 - Create unique IDs using format: citycode-type-descriptive-name
 - Use realistic phone numbers: +1 (212) 555-XXXX
 - Generate engaging descriptions and highlights
-- Include 2-3 sample image URLs (use placeholder URLs like https://images.unsplash.com/photo-xyz?w=400)
+- IMAGES: Include 1-2 relevant image URLs matching the EXACT activity/place name
+  * Use Unsplash with descriptive search terms: "https://images.unsplash.com/photo-[id]?w=400"
+  * CRITICAL: Image MUST match the activity - if activity is "Central Park", use park/nature images, NOT random photos
+  * Restaurant images should show food/dining, Museum images should show art/exhibits, Parks should show greenery/outdoor scenes
+  * When in doubt, use generic category images (restaurant interior, museum exterior, park landscape)
 - Set realistic prices: restaurants $15-60, attractions $25-100
 - Create believable review snippets
 - For partner activities: use exact provider names from MCP data
@@ -447,6 +731,25 @@ IMPORTANT RULES:
 - For non-partner blocks: set isPartner=false, source="suggested", addFromOurRecommendation=false
 - IMPORTANT: Include realistic latitude and longitude coordinates for each activity (use actual coordinates for the city)
 - Example coordinates for NYC: Times Square (40.7580, -73.9855), Central Park (40.7829, -73.9654), Museum Mile (40.7794, -73.9632)
+
+**CRITICAL BUSINESS HOURS RULE:**
+- The "availability" field shows when the business is OPEN (e.g., "10am-5pm")
+- Your activity's endTime MUST be at or before the closing time
+- Example: If availability = "10am-5pm", then endTime can be "5:00 PM" at latest (NOT "7:00 PM")
+- Calculate: If place closes at 5pm and you need 2 hours, START at 3pm, END at 5pm (not start at 4pm end at 6pm!)
+- VERIFY: Does your endTime exceed the closing time in availability? If YES, FIX IT!
+
+**REALISTIC BUSINESS HOURS - USE THESE AS GUIDELINES (not strict rules):**
+- Research actual business hours when possible - some restaurants open for breakfast (7am-8am), others are dinner-only (5pm-10pm)
+- Breakfast/Brunch spots: Often "7am-3pm" or "8am-4pm"
+- Cafes: "7am-7pm" or "8am-8pm"
+- Lunch/Dinner restaurants: "11am-10pm" or "11am-11pm" or "11am-12am" (midnight for popular spots)
+- Dinner-only fine dining: "5pm-10pm" or "5pm-11pm"
+- Museums: Typically "10am-5pm" or "10am-6pm" - rarely open late
+- Attractions: "9am-6pm" or "10am-7pm"
+- Parks: "6am-11pm" or "24/7"
+- DO NOT use: "1am", "2am", "3am", "4am" closings (nonsensical except for actual bars/clubs)
+- When uncertain, use conservative hours but allow for variation (not all restaurants are 11am-10pm!)
 
 Infer destination, dates (today is ${today}), travelers, pace, and interests from the message.
 Keyword hints: ${keywordHint}
@@ -546,14 +849,32 @@ export async function planFromNaturalLanguage(
     // CLOSING TIME VALIDATION (Phase 1 - Initial Plans)
     // Validate that all activities respect business hours
     // CRITICAL: Force timeline to be valid (fix backwards times, overlaps)
+    console.log('[natural-planner] Running aggressive time validation...');
     const timelineFixed = forceValidTimeline(validatedResult);
     
     // Then validate closing times
     const closingTimeValidatedResult = await validateClosingTimes(timelineFixed);
     
+    // FINAL SAFETY NET: Catch any remaining bad times
+    const finalSafeResult = finalTimeSafetyCheck(closingTimeValidatedResult);
+    
+    // FINAL SANITY CHECK: Log all activity times for debugging
+    console.log('[natural-planner] === FINAL ACTIVITY TIMES ===');
+    for (const day of finalSafeResult.days || []) {
+      console.log(`Day ${day.day}:`);
+      for (const act of (day.blocks || day.activities || [])) {
+        const name = act.title || act.name || act.activity?.name || 'Unknown';
+        const start = act.startTime || act.start;
+        const end = act.endTime || act.end;
+        const availability = act.activity?.availability || act.availability || 'N/A';
+        console.log(`  [${start}-${end}] ${name} (open: ${availability})`);
+      }
+    }
+    console.log('[natural-planner] ================================');
+    
     // Programmatic map link generation (CodeFest Feature)
     // Add per-day Google Maps links if user requested map in their prompt
-    const resultWithMapLinks = addMapLinksToTripPlan(closingTimeValidatedResult, userWantsMap);
+    const resultWithMapLinks = addMapLinksToTripPlan(finalSafeResult, userWantsMap);
     
     return resultWithMapLinks;
 

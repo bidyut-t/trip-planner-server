@@ -4,7 +4,7 @@
 
 /**
  * Normalize time strings to 24-hour format for sorting/comparison
- * Handles: "08:30", "8:30 AM", "2:00 PM", "14:00"
+ * Handles: "08:30", "8:30 AM", "2:00 PM", "14:00", "8am", "10pm"
  */
 export function normalizeTimeForSorting(timeStr: string): string {
   // Already in 24-hour format (HH:MM)
@@ -12,12 +12,12 @@ export function normalizeTimeForSorting(timeStr: string): string {
     return timeStr;
   }
   
-  // Handle 12-hour format with AM/PM
-  const match = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (match) {
-    let hours = parseInt(match[1], 10);
-    const minutes = match[2];
-    const period = match[3].toUpperCase();
+  // Handle 12-hour format WITH minutes: "8:30 AM"
+  const matchWithMinutes = timeStr.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (matchWithMinutes) {
+    let hours = parseInt(matchWithMinutes[1], 10);
+    const minutes = matchWithMinutes[2];
+    const period = matchWithMinutes[3].toUpperCase();
     
     if (period === 'PM' && hours !== 12) {
       hours += 12;
@@ -26,6 +26,21 @@ export function normalizeTimeForSorting(timeStr: string): string {
     }
     
     return `${hours.toString().padStart(2, '0')}:${minutes}`;
+  }
+  
+  // Handle 12-hour format WITHOUT minutes: "8am", "10pm"
+  const matchNoMinutes = timeStr.match(/(\d{1,2})\s*(am|pm)/i);
+  if (matchNoMinutes) {
+    let hours = parseInt(matchNoMinutes[1], 10);
+    const period = matchNoMinutes[2].toUpperCase();
+    
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return `${hours.toString().padStart(2, '0')}:00`;
   }
   
   // Fallback
