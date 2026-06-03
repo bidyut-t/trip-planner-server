@@ -25,6 +25,46 @@ import {
 import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 import { extractClosingTime, normalizeTimeForSorting, convertTo12Hour, subtractMinutes, getTimeDiffMinutes } from "../utils/time-utils.js";
 import { forceValidTimeline } from "../utils/force-timeline.js";
+import { planWithOptimizedFlow } from "./plan-first-optimizer.service.js";
+
+// PERFORMANCE: Simple cache for partner data to avoid repeated file reads
+const partnerDataCache = new Map<string, any>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+export async function loadPartnerDataCached(city: string): Promise<{
+  restaurants: any[];
+  activities: any[];
+  cabs: any[];
+  games: any[];
+}> {
+  const cacheKey = `partners-${city}`;
+  const cached = partnerDataCache.get(cacheKey);
+  
+  if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+    console.log(`[partner-cache] Using cached data for ${city}`);
+    return cached.data;
+  }
+  
+  console.log(`[partner-cache] Loading fresh data for ${city}`);
+  const data = await Promise.all([
+    loadPartnerRestaurants(city),
+    loadPartnerActivities(city), 
+    loadPartnerCabs(city),
+    loadPartnerGames(city)
+  ]).then(([restaurants, activities, cabs, games]) => ({
+    restaurants,
+    activities,
+    cabs,
+    games
+  }));
+  
+  partnerDataCache.set(cacheKey, {
+    data,
+    timestamp: Date.now()
+  });
+  
+  return data;
+}
 
 /**
  * FINAL SAFETY NET - Catches any remaining time issues after all other validation
@@ -794,25 +834,18 @@ export async function planFromNaturalLanguage(
   prompt: string,
   userId?: string,
 ): Promise<any> {
-  const destinations = await loadDestinations();
-  const suggestedKeywords = extractPromptKeywords(prompt);
+  // PERFORMANCE OPTIMIZATION: Run data loading in parallel
+  const [destinations, suggestedKeywords, userProfile] = await Promise.all([
+    loadDestinations(),
+    extractPromptKeywords(prompt),
+    userId ? loadUserProfiles().then(profiles => profiles.find(p => p.id === userId)) : Promise.resolve(undefined)
+  ]);
 
   // Load user profile if userId is explicitly provided
   // No profile personalization applied by default - keeps plans generic
   // In production, this would be based on authenticated user session
-  let userProfile: UserProfile | undefined;
   if (userId) {
-    const userProfiles = await loadUserProfiles();
-    userProfile = userProfiles.find(p => p.id === userId);
     console.log('[natural-planner] User profile loaded:', userProfile ? `${userProfile.name} (${userId})` : 'NOT FOUND');
-    if (userProfile) {
-      console.log('[natural-planner] Profile details:', {
-        travelStyle: userProfile.travelStyle,
-        budgetLevel: userProfile.budgetLevel,
-        fitnessLevel: userProfile.preferences.fitnessLevel,
-        dietaryRestrictions: userProfile.dietaryRestrictions,
-      });
-    }
   } else {
     console.log('[natural-planner] No userId provided - generating generic plan');
   }
@@ -827,55 +860,18 @@ export async function planFromNaturalLanguage(
                        lowerPrompt.includes("google maps");
 
   try {
-    const naturalPlanPrompt = buildNaturalPlanPrompt(
-      prompt,
-      destinations,
-      suggestedKeywords,
-      userProfile,  // Pass user profile for personalized planning
-    );
+    // ALWAYS USE PLAN-FIRST OPTIMIZATION (since isCatalogMcpEnabled() is always true)
+    console.log('[natural-planner] Using PLAN-FIRST optimization approach');
+    const optimizedResult = await planWithOptimizedFlow(prompt, destinations, suggestedKeywords, userProfile);
     
-    if (userProfile) {
-      console.log('[natural-planner] Using personalized prompt for:', userProfile.name);
-    }
-    
-    const raw = await runOpenAiPrompt(naturalPlanPrompt);
-    
-    // AI returns the new schema directly - parse and validate partners
-    const result = parseLlmJson(raw);
-    
-    // Validate and enrich partner information
-    const validatedResult = await validateAndEnrichNewSchemaPartners(result);
-    
-    // CLOSING TIME VALIDATION (Phase 1 - Initial Plans)
-    // Validate that all activities respect business hours
-    // CRITICAL: Force timeline to be valid (fix backwards times, overlaps)
-    console.log('[natural-planner] Running aggressive time validation...');
-    const timelineFixed = forceValidTimeline(validatedResult);
-    
-    // Then validate closing times
+    // Use existing comprehensive time validation instead of streamlined
+    console.log('[natural-planner] Running comprehensive time validation...');
+    const timelineFixed = forceValidTimeline(optimizedResult);
     const closingTimeValidatedResult = await validateClosingTimes(timelineFixed);
-    
-    // FINAL SAFETY NET: Catch any remaining bad times
     const finalSafeResult = finalTimeSafetyCheck(closingTimeValidatedResult);
     
-    // FINAL SANITY CHECK: Log all activity times for debugging
-    console.log('[natural-planner] === FINAL ACTIVITY TIMES ===');
-    for (const day of finalSafeResult.days || []) {
-      console.log(`Day ${day.day}:`);
-      for (const act of (day.blocks || day.activities || [])) {
-        const name = act.title || act.name || act.activity?.name || 'Unknown';
-        const start = act.startTime || act.start;
-        const end = act.endTime || act.end;
-        const availability = act.activity?.availability || act.availability || 'N/A';
-        console.log(`  [${start}-${end}] ${name} (open: ${availability})`);
-      }
-    }
-    console.log('[natural-planner] ================================');
-    
-    // Programmatic map link generation (CodeFest Feature)
-    // Add per-day Google Maps links if user requested map in their prompt
+    // Add map links if requested
     const resultWithMapLinks = addMapLinksToTripPlan(finalSafeResult, userWantsMap);
-    
     return resultWithMapLinks;
 
   } catch (err) {
