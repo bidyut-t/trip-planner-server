@@ -134,9 +134,9 @@ BEFORE adding any activity:
 2. Choose a gap that fits your activity duration  
 3. Schedule ONLY within that gap
 
-Example: Gap is [4:00 PM - 7:30 PM]
-✅ CORRECT: "start": "4:00 PM", "end": "6:00 PM" (fits in gap)
-❌ WRONG: "start": "2:00 PM", "end": "4:00 PM" (overlaps existing!)
+   Example: Gap is [4:00 PM - 7:30 PM]
+   CORRECT: "start": "4:00 PM", "end": "6:00 PM" (fits in gap)
+   WRONG: "start": "2:00 PM", "end": "4:00 PM" (overlaps existing!)
 
 REQUEST TYPES:
 
@@ -237,6 +237,17 @@ OPERATION TYPES:
 
 CRITICAL RULES:
 1. TIME FORMAT: 12-hour with AM/PM ("8:30 AM", "2:00 PM", "7:30 PM")
+
+**CRITICAL: EXACT REAL PLACE NAMES ONLY - NO APPROXIMATIONS**
+   - Use the EXACT, FULL official business name (e.g., "Little Ruby's" not "Ruby's Cafe")
+   - NEVER shorten, abbreviate, or paraphrase business names
+   - If unsure of exact name, ONLY use ultra-famous places everyone knows:
+     * Major museums: "The Metropolitan Museum of Art", "MoMA"
+     * Iconic landmarks: "Statue of Liberty", "Central Park"
+     * National chains: "Shake Shack", "Chipotle"
+   - DO NOT USE approximate/shortened names like "Ruby's Cafe" when real name is "Little Ruby's"
+   - When in doubt, stick to world-famous establishments with exact full names
+
 2. END AFTER START: End time MUST be later than start time. 
    
    NEVER DO THIS: "2:00 PM - 2:00 AM" (goes backwards!)
