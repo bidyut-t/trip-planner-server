@@ -187,7 +187,7 @@ Rules:
 
   try {
     console.log('[ai-partner-match] Using AI to match activities with partners...');
-    const aiResponse = await runOpenAiPrompt(matchingPrompt, true); // Use fast mode
+    const aiResponse = await runOpenAiPrompt(matchingPrompt); // Use fast mode
     const matchResults = JSON.parse(aiResponse);
     
     let enhancementsApplied = 0;
