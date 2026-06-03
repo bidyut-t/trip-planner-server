@@ -794,16 +794,14 @@ export async function planFromNaturalLanguage(
   prompt: string,
   userId?: string,
 ): Promise<any> {
-  const destinations = await loadDestinations();
-  const suggestedKeywords = extractPromptKeywords(prompt);
 
-  // Load user profile if userId is explicitly provided
-  // No profile personalization applied by default - keeps plans generic
-  // In production, this would be based on authenticated user session
-  let userProfile: UserProfile | undefined;
+  const [destinations, suggestedKeywords, userProfile] = await Promise.all([
+    loadDestinations(),
+    extractPromptKeywords(prompt),
+    userId ? loadUserProfiles().then(profiles => profiles.find(p => p.id === userId)) : Promise.resolve(undefined)
+  ]);
+
   if (userId) {
-    const userProfiles = await loadUserProfiles();
-    userProfile = userProfiles.find(p => p.id === userId);
     console.log('[natural-planner] User profile loaded:', userProfile ? `${userProfile.name} (${userId})` : 'NOT FOUND');
     if (userProfile) {
       console.log('[natural-planner] Profile details:', {
@@ -831,7 +829,7 @@ export async function planFromNaturalLanguage(
       prompt,
       destinations,
       suggestedKeywords,
-      userProfile,  // Pass user profile for personalized planning
+      userProfile,
     );
     
     if (userProfile) {
