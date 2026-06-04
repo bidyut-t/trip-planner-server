@@ -227,13 +227,8 @@ export function closeMcpConnections(): void {
   }
 }
 
-// Fallback to the original function for non-MCP usage
-export async function runOpenAiPrompt(prompt: string): Promise<string> {
-  if (isCatalogMcpEnabled()) {
-    return runOpenAiPromptWithMcp(prompt);
-  }
-
-  // Original implementation for when MCP is disabled
+// Generic planning without MCP - always fast
+export async function runOpenAiPromptNoMcp(prompt: string): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   const baseURL = process.env.OPENAI_BASE_URL;
   if (!apiKey) {
@@ -250,21 +245,163 @@ export async function runOpenAiPrompt(prompt: string): Promise<string> {
     }),
   });
 
-  // const completion = await client.chat.completions.create({
-  //   model: getOpenAiModelId(),
-  //   messages: [{ role: "user", content: prompt }],
-  // });
-
   const completion = await makeGuardrailsRequest({
     model: getOpenAiModelId(),
     messages: [{ role: "user", content: prompt }],
     guardrails: ["PII Filter"],
   });
-  
 
   const content = completion.choices[0]?.message?.content?.trim();
   if (!content) {
     throw new Error("OpenAI returned an empty response");
   }
   return content;
+}
+
+// Partner replacement with MCP data
+export async function runPartnerReplacementWithMcp(
+  genericPlan: string,
+  prompt: string,
+): Promise<string> {
+  console.log("[openai-mcp] Starting partner replacement with MCP");
+  
+  const apiKey = process.env.OPENAI_API_KEY;
+  const baseURL = process.env.OPENAI_BASE_URL;
+  if (!apiKey) {
+    throw new Error(
+      "OPENAI_API_KEY is required. Set it in .env (see .env.example).",
+    );
+  }
+
+  const client = new OpenAI({
+    apiKey,
+    baseURL,
+    httpAgent: new https.Agent({
+      rejectUnauthorized: false,
+    }),
+  });
+
+  const mcpClient = await getMcpClient();
+  if (!mcpClient) {
+    console.log("[openai-mcp] No MCP client available, returning generic plan");
+    return genericPlan;
+  }
+
+  const partnerReplacementPrompt = `
+You are a travel plan optimizer. I have a generic travel plan and access to partner data via tools.
+
+Your job is to:
+1. Analyze the generic plan provided below
+2. Use the available tools to get partner data (restaurants, activities, games, cabs)
+3. Replace generic activities with our partner offerings where appropriate based on:
+   - Location proximity (latitude/longitude matching)
+   - Activity type matching (restaurant for dining, activity for attractions, etc.)
+   - Quality and ratings
+   - Time availability and opening hours
+
+IMPORTANT: Only replace activities where our partners offer equal or better options. Keep the same structure, timing, and overall plan flow.
+
+Generic Plan:
+${genericPlan}
+
+Original User Request: 
+${prompt}
+
+Please analyze this plan and replace generic activities with our partner offerings where beneficial. Return the enhanced plan in the same JSON format.
+`;
+
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "user", content: partnerReplacementPrompt },
+  ];
+
+  const tools = convertMcpToolsToOpenAi(mcpClient.tools);
+  console.log(`[openai-mcp] Using ${tools.length} MCP tools for partner replacement`);
+
+  const maxIterations = 3; // Fewer iterations for replacement task
+  let iteration = 0;
+
+  while (iteration < maxIterations) {
+    iteration++;
+    console.log(`[openai-mcp] Partner replacement iteration ${iteration}`);
+
+    const completion = await makeGuardrailsRequest({
+      model: getOpenAiModelId(),
+      messages,
+      guardrails: ["PII Filter"],
+      tools,
+      tool_choice: iteration === 1 ? "auto" : undefined,
+    });
+
+    const message = completion.choices[0]?.message;
+    if (!message) {
+      throw new Error("OpenAI returned no message");
+    }
+
+    messages.push(message);
+
+    // If no tool calls, return the content
+    if (!message.tool_calls || message.tool_calls.length === 0) {
+      const content = message.content?.trim();
+      if (!content) {
+        throw new Error("OpenAI returned an empty response");
+      }
+      console.log("[openai-mcp] Partner replacement completed");
+      return content;
+    }
+
+    // Process tool calls
+    console.log(
+      `[openai-mcp] Processing ${message.tool_calls.length} tool calls`,
+    );
+
+    for (const toolCall of message.tool_calls) {
+      try {
+        const args = JSON.parse(toolCall.function.arguments);
+        console.log(
+          `[openai-mcp] Calling tool: ${toolCall.function.name} with args:`,
+          args,
+        );
+
+        const result = await mcpClient.client.callTool({
+          name: toolCall.function.name,
+          arguments: args,
+        });
+
+        const resultText = result.content
+          .map((c) => (c.type === "text" ? c.text : "[non-text content]"))
+          .join("\n");
+
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: resultText,
+        });
+
+        console.log(
+          `[openai-mcp] Tool ${toolCall?.function?.name} result:`,
+          resultText.substring(0, 200) + "...",
+        );
+      } catch (error) {
+        console.error(`[openai-mcp] Tool call failed:`, error);
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    }
+  }
+
+  throw new Error(
+    "Maximum iterations reached without getting a partner replacement response",
+  );
+}
+
+// Fallback to the original function for non-MCP usage
+export async function runOpenAiPrompt(prompt: string): Promise<string> {
+  if (isCatalogMcpEnabled()) {
+    return runOpenAiPromptWithMcp(prompt);
+  }
+
+  return runOpenAiPromptNoMcp(prompt);
 }

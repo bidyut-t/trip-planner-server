@@ -14,7 +14,7 @@ import {
 } from "./catalog/catalog.service.js";
 import { extractPromptKeywords } from "./nlp/nlp-parser.keywords.js";
 import { parseLlmJson } from "../utils/llm-json.js";
-import { runOpenAiPrompt } from "../utils/openai-mcp-agent.js";
+import { runOpenAiPrompt, runOpenAiPromptNoMcp, runPartnerReplacementWithMcp } from "../utils/openai-mcp-agent.js";
 import { isCatalogMcpEnabled } from "../utils/env.js";
 import { buildCatalogMcpPromptBlock } from "../utils/mcp-catalog-prompt.js";
 import { buildScheduleRulesBlock } from "./prompts/planner.schedule-rules.js";
@@ -25,6 +25,7 @@ import {
 import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 import { extractClosingTime, normalizeTimeForSorting, convertTo12Hour, subtractMinutes, getTimeDiffMinutes } from "../utils/time-utils.js";
 import { forceValidTimeline } from "../utils/force-timeline.js";
+import { buildOptimizedPrompt } from "../utils/optimized-prompt.js";
 
 /**
  * FINAL SAFETY NET - Catches any remaining time issues after all other validation
@@ -825,18 +826,36 @@ export async function planFromNaturalLanguage(
                        lowerPrompt.includes("google maps");
 
   try {
-    const naturalPlanPrompt = buildNaturalPlanPrompt(
-      prompt,
-      destinations,
-      suggestedKeywords,
-      userProfile,
-    );
-    
+    console.time('buildOptimizedPrompt')
+    const optimizedPrompt = buildOptimizedPrompt(prompt, destinations, userProfile);
+    console.timeEnd('buildOptimizedPrompt')
     if (userProfile) {
-      console.log('[natural-planner] Using personalized prompt for:', userProfile.name);
+      console.log('[natural-planner] Using personalized optimized prompt for:', userProfile.name);
     }
     
-    const raw = await runOpenAiPrompt(naturalPlanPrompt);
+    let raw: string;
+    
+    if (isCatalogMcpEnabled()) {
+      // TWO-PHASE APPROACH: Generic plan + Partner optimization
+      console.log('[natural-planner] Using two-phase approach with MCP');
+      
+      // PHASE 1: Generate generic plan (OPTIMIZED - much faster)
+      console.time('generateGenericPlan');
+      const genericPlanRaw = await runOpenAiPromptNoMcp(optimizedPrompt);
+      console.timeEnd('generateGenericPlan');
+      console.log('[natural-planner] Generic plan generated, now optimizing with partners...');
+      
+      // PHASE 2: Replace with partner activities (targeted MCP usage)
+      console.time('partnerOptimization');
+      raw = await runPartnerReplacementWithMcp(genericPlanRaw, prompt);
+      console.timeEnd('partnerOptimization');
+    } else {
+      // SINGLE-PHASE: Direct planning with OPTIMIZED PROMPT
+      console.log('[natural-planner] Using optimized single-phase approach (no MCP)');
+      console.time('generateOptimizedPlan');
+      raw = await runOpenAiPromptNoMcp(optimizedPrompt);
+      console.timeEnd('generateOptimizedPlan');
+    }
     
     // AI returns the new schema directly - parse and validate partners
     const result = parseLlmJson(raw);
@@ -872,8 +891,9 @@ export async function planFromNaturalLanguage(
     
     // Programmatic map link generation (CodeFest Feature)
     // Add per-day Google Maps links if user requested map in their prompt
+    console.time('addMapLinksToTripPlan');
     const resultWithMapLinks = addMapLinksToTripPlan(finalSafeResult, userWantsMap);
-    
+    console.timeEnd('addMapLinksToTripPlan');
     return resultWithMapLinks;
 
   } catch (err) {
