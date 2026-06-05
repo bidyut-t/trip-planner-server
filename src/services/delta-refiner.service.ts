@@ -44,6 +44,7 @@ export type DeltaOperation =
       insertAt?: "start" | "end";
     }
   | { type: "remove"; activityNames: string[] }
+  | { type: "replace"; removeActivity: string; addActivity: any }
   | { type: "modify"; activityName: string; changes: any }
   | { type: "reorder"; newOrder: string[] };
 
@@ -123,7 +124,68 @@ USER REQUEST:
 YOUR TASK:
 Generate ONLY the changes needed (deltas). Don't regenerate the entire plan.
 
-**CRITICAL RULE**: A day should have 6-7 activities MAX and end by 10 PM. When adding activities, you MUST remove or shorten others to maintain balance.
+⚠️  IMPORTANT: If the requested item is NOT available in partner data (e.g., no Indian restaurants in MCP tools), DO NOT keep calling the same tool repeatedly. Instead:
+
+1. **FIRST TRY**: Use MCP tools to find partner options
+2. **IF NOT FOUND**: Suggest real-world alternatives from your knowledge
+3. **BE CLEAR**: Mark non-partner suggestions as \`"isPartner": false\`
+
+EXAMPLE - User wants "Indian restaurant":
+- Partner data only has pizza/Italian → Don't loop
+- Suggest real NYC Indian restaurants: "Junoon", "Tamarind", "Baar Baar"
+- Response: "I couldn't find Indian restaurants in our partner network, but I've added some excellent real Indian restaurants in NYC"
+
+FALLBACK STRATEGY:
+{
+  \\"operations\\": [
+    {
+      \\"type\\": \\"add\\", 
+      \\"activities\\": [
+        {
+          \\"name\\": \\"Junoon\\",
+          \\"type\\": \\"restaurant\\",
+          \\"start\\": \\"1:00 PM\\",
+          \\"end\\": \\"2:30 PM\\", 
+          \\"price\\": 45,
+          \\"description\\": \\"Upscale Indian restaurant known for authentic flavors\\",
+          \\"availability\\": \\"12pm-10pm\\"
+        }
+      ]
+    }
+  ],
+  \\"conversationalResponse\\": \\"I added Junoon, a highly-rated Indian restaurant in NYC, since our partner network doesn't have Indian options.\\"
+}
+
+**CRITICAL RULE**: A day should have 6-7 activities MAX and **END BY 10:00 PM SHARP**. When adding activities:
+1. **ASSESS CAPACITY**: Count existing activities first
+2. **CHECK END TIME**: If day already ends at 10 PM or later, DO NOT ADD MORE
+3. **SMART REPLACEMENT**: If day is full (6+ activities), REPLACE instead of ADD
+4. **BUSINESS HOURS**: Check activity availability - don't schedule museums after 5 PM or tours after closing
+5. **REMOVE IF NEEDED**: Remove activities that can't fit properly rather than creating overlaps
+6. **ABSOLUTE CAP**: NEVER schedule anything to start after 10 PM - remove instead
+
+**⚠️  HARD RULE - NO EXCEPTIONS**: 
+- **NO activities starting after 10:00 PM**  
+- **NO activities ending after 10:30 PM**
+- **NO backwards time** (like "11:30 PM - 10:00 PM")
+- If an activity can't fit before 10 PM → **REMOVE IT**
+
+**INTELLIGENT MODIFICATION STRATEGIES**:
+
+**WHEN DAY IS FULL** (6+ activities):
+- ADD request → Use REPLACE operation instead
+- Find least important existing activity and replace it
+- Example: "add museums" → REMOVE "least interesting restaurant" + ADD "museum"
+
+**WHEN BUSINESS HOURS CONFLICT**:
+- Activity closes at 5 PM but only slot is 6 PM → REMOVE or SUGGEST alternative
+- Don't force "Empire State Building" tour at 11 PM when it closes at 10 PM
+- Offer alternatives: "Evening walk" instead of closed attraction
+
+**WHEN TIMING IS IMPOSSIBLE**:
+- User wants more activities but day already ends at 10 PM → REMOVE something first
+- Gap too small for new activity → REMOVE adjacent activity to create space
+- Better to have 5 good activities than 8 overlapping ones
 
 **ABSOLUTELY NO OVERLAPS ALLOWED - CRITICAL**: 
 
@@ -225,7 +287,22 @@ OPERATION TYPES:
 2. REMOVE activities:
 { "type": "remove", "activityNames": ["Central Park Zoo"] }
 
-3. MODIFY activity:
+3. REPLACE activity (smart removal + addition):
+{
+  "type": "replace",
+  "removeActivity": "Expensive Fine Dining Restaurant", 
+  "addActivity": {
+    "name": "Local Neighborhood Bistro",
+    "type": "restaurant",
+    "start": "6:00 PM",
+    "end": "7:30 PM", 
+    "price": 35,
+    "description": "Cozy local restaurant with authentic cuisine",
+    "availability": "5pm-11pm"
+  }
+}
+
+4. MODIFY activity:
 {
   "type": "modify",
   "activityName": "Whitney Museum",
@@ -746,6 +823,67 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
         break;
       }
 
+      case "replace": {
+        // First, remove the old activity
+        const activityName = op.removeActivity;
+        const activityIndex = activities.findIndex((a: any) => {
+          const name = a.title || a.name || a.activity?.name || '';
+          return name.toLowerCase().includes(activityName.toLowerCase());
+        });
+        
+        if (activityIndex >= 0) {
+          const removedActivity = activities[activityIndex];
+          const removedName = removedActivity.title || removedActivity.name || removedActivity.activity?.name || 'Unknown';
+          console.log(`[delta-refiner] REPLACING: "${removedName}" with "${op.addActivity.name}"`);
+          
+          // Convert replacement activity to schema format
+          const newActivity = {
+            start: op.addActivity.start,
+            end: op.addActivity.end,
+            startTime: op.addActivity.start,
+            endTime: op.addActivity.end,
+            timeBlock: `${op.addActivity.start} - ${op.addActivity.end}`,
+            type: op.addActivity.type,
+            title: op.addActivity.name,
+            partner: false,
+            source: "replacement",
+            addFromOurRecommendation: false,
+            notes: op.addActivity.description || '',
+            latitude: op.addActivity.latitude || 40.7589,
+            longitude: op.addActivity.longitude || -73.9851,
+            price: op.addActivity.price || 0,
+            currency: op.addActivity.currency || "USD",
+            rating: op.addActivity.rating || 4.0,
+            reviews: op.addActivity.reviews || 100,
+            earnPoints: op.addActivity.earnPoints || 0,
+            duration: op.addActivity.duration || "1.5 hours",
+            images: op.addActivity.images || ["https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=400"],
+            highlights: op.addActivity.highlights || ["Great replacement option"],
+            availability: op.addActivity.availability || "9am-10pm",
+          };
+          
+          // Replace the activity at the same position
+          activities[activityIndex] = newActivity;
+          console.log(`[delta-refiner] ✓ REPLACED: New activity "${op.addActivity.name}" scheduled for ${op.addActivity.start} - ${op.addActivity.end}`);
+        } else {
+          console.warn(`[delta-refiner] Could not find activity to replace: "${activityName}"`);
+          // Just add the new activity if we can't find the one to replace
+          const newActivity = {
+            start: op.addActivity.start,
+            end: op.addActivity.end,
+            type: op.addActivity.type,
+            title: op.addActivity.name,
+            partner: false,
+            source: "suggested",
+            addFromOurRecommendation: false,
+            notes: op.addActivity.description || '',
+            price: op.addActivity.price || 0,
+          };
+          activities.push(newActivity);
+        }
+        break;
+      }
+
       case "modify": {
         const activityName = op.activityName;
         const activityIndex = activities.findIndex((a: any) => {
@@ -772,14 +910,18 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
     }
   }
 
-  // CRITICAL: Sort activities chronologically and validate times
+  // CRITICAL: Sort activities chronologically and resolve any remaining overlaps
   activities.sort((a: any, b: any) => {
     const timeA = normalizeTimeForSorting(a.start || a.startTime || '00:00');
     const timeB = normalizeTimeForSorting(b.start || b.startTime || '00:00');
     return timeA.localeCompare(timeB);
   });
   
-  // Validate: no backwards time jumps or overlaps
+  // FINAL OVERLAP RESOLUTION: Apply one more time after all operations
+  console.log('[delta-refiner] Applying final overlap resolution...');
+  activities = resolveTimeOverlaps(activities);
+  
+  // Final validation: log any remaining conflicts
   for (let i = 1; i < activities.length; i++) {
     const prev = activities[i - 1];
     const curr = activities[i];
@@ -787,11 +929,10 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
     const prevEnd = normalizeTimeForSorting(prev.end || prev.endTime || '23:59');
     const currStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
     
-    if (currStart < prevEnd) {
-      // OVERLAP DETECTED: Log warning but don't auto-shift (AI should fix this)
+    if (currStart <= prevEnd) {
       const prevName = prev.title || prev.name || prev.activity?.name || 'Unknown';
       const currName = curr.title || curr.name || curr.activity?.name || 'Unknown';
-      console.warn(`[delta-refiner] TIME CONFLICT: "${prevName}" ends at ${prevEnd} but "${currName}" starts at ${currStart}`);
+      console.error(`[delta-refiner] CRITICAL: Unresolved overlap - "${prevName}" ends at ${convertTo12Hour(prevEnd)} but "${currName}" starts at ${convertTo12Hour(currStart)}`);
     }
   }
 
@@ -807,15 +948,126 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
 }
 
 /**
- * AUTOMATIC OVERLAP RESOLUTION
+ * AUTOMATIC OVERLAP RESOLUTION with business hours validation and daily time caps
  * Intelligently fixes overlapping activities by adjusting start/end times
- * while preserving activity durations where possible
+ * while preserving activity durations where possible and respecting business hours.
+ * CRITICAL: Removes activities instead of scheduling them past reasonable end times.
  */
 function resolveTimeOverlaps(activities: any[]): any[] {
   if (activities.length < 2) return activities;
   
   console.log(`[overlap-resolver] Checking ${activities.length} activities for overlaps`);
   
+  // HARD DAILY TIME CAP - NO ACTIVITIES AFTER 10:30 PM
+  const DAILY_END_CAP = "22:30"; // 10:30 PM in 24-hour format
+  console.log(`[overlap-resolver] Daily cap: No activities after ${convertTo12Hour(DAILY_END_CAP)}`);
+  
+  // First, fix zero-duration activities and normalize fields
+  activities.forEach(act => {
+    // Ensure consistent time fields
+    if (!act.start && act.startTime) act.start = act.startTime;
+    if (!act.end && act.endTime) act.end = act.endTime;
+    if (!act.startTime && act.start) act.startTime = act.start;
+    if (!act.endTime && act.end) act.endTime = act.end;
+    if (!act.timeBlock && act.start && act.end) {
+      act.timeBlock = `${act.start} - ${act.end}`;
+    }
+    
+    // Fix zero-duration activities (e.g., "10:00 PM - 10:00 PM")
+    if (act.start && act.end && act.start === act.end) {
+      const activityName = act.title || act.name || act.activity?.name || 'Activity';
+      console.log(`[overlap-resolver] FIXING zero-duration: "${activityName}" ${act.start} - ${act.end}`);
+      
+      // Get availability to determine appropriate duration
+      const availability = act.availability || act.activity?.availability || '';
+      let durationMinutes = 90; // Default 1.5 hours
+      
+      const activityType = act.type || act.activity?.category || 'activity';
+      if (activityType === 'restaurant') durationMinutes = 120; // 2 hours for dining
+      else if (activityType === 'museum') durationMinutes = 180; // 3 hours for museums
+      
+      const start24 = normalizeTimeForSorting(act.start);
+      const end24 = addMinutesToTime(start24, durationMinutes);
+      const end12 = convertTo12Hour(end24);
+      
+      // Validate against business hours
+      if (availability && !isWithinBusinessHours(act.start, end12, availability)) {
+        console.log(`[overlap-resolver] Activity outside business hours, shortening duration`);
+        // Try shorter duration
+        const shorterEnd24 = addMinutesToTime(start24, 60); // 1 hour minimum
+        const shorterEnd12 = convertTo12Hour(shorterEnd24);
+        if (isWithinBusinessHours(act.start, shorterEnd12, availability)) {
+          act.end = shorterEnd12;
+          act.endTime = shorterEnd12;
+        } else {
+          // If still outside, just use the original end time
+          act.end = end12;
+          act.endTime = end12;
+        }
+      } else {
+        act.end = end12;
+        act.endTime = end12;
+      }
+      
+      act.timeBlock = `${act.start} - ${act.end}`;
+      
+      console.log(`[overlap-resolver] ✓ FIXED zero-duration: "${activityName}" now ${act.start} - ${act.end}`);
+    }
+  });
+  
+  // STEP 1: REMOVE ACTIVITIES THAT START AFTER DAILY CAP
+  activities = activities.filter((act: any) => {
+    const startTime24 = normalizeTimeForSorting(act.start || act.startTime || '00:00');
+    const activityName = act.title || act.name || act.activity?.name || 'Activity';
+    
+    if (startTime24 > DAILY_END_CAP) {
+      console.log(`[overlap-resolver] 🚫 REMOVING: "${activityName}" starts at ${convertTo12Hour(startTime24)} (after daily cap)`);
+      return false;
+    }
+    return true;
+  });
+  
+  // STEP 2: FIX ACTIVITIES THAT END AFTER DAILY CAP
+  activities.forEach(act => {
+    const startTime24 = normalizeTimeForSorting(act.start || act.startTime || '00:00');
+    const endTime24 = normalizeTimeForSorting(act.end || act.endTime || '00:00');
+    const activityName = act.title || act.name || act.activity?.name || 'Activity';
+    
+    if (endTime24 > DAILY_END_CAP) {
+      const cappedEnd12 = convertTo12Hour(DAILY_END_CAP);
+      console.log(`[overlap-resolver] 📐 CAPPING: "${activityName}" end time ${convertTo12Hour(endTime24)} → ${cappedEnd12}`);
+      
+      act.end = cappedEnd12;
+      act.endTime = cappedEnd12;
+      act.timeBlock = `${act.start || act.startTime} - ${cappedEnd12}`;
+    }
+    
+    // CRITICAL: Check for backwards time (end before start)
+    const finalStart24 = normalizeTimeForSorting(act.start || act.startTime || '00:00');
+    const finalEnd24 = normalizeTimeForSorting(act.end || act.endTime || '00:00');
+    
+    if (finalEnd24 <= finalStart24) {
+      console.error(`[overlap-resolver] ⚠️  BACKWARDS TIME DETECTED: "${activityName}" ${convertTo12Hour(finalStart24)}-${convertTo12Hour(finalEnd24)}`);
+      // This activity is impossible - mark for removal
+      act._markedForRemoval = true;
+    }
+  });
+  
+  // STEP 3: REMOVE ACTIVITIES WITH BACKWARDS TIME
+  const beforeRemoval = activities.length;
+  activities = activities.filter(act => !act._markedForRemoval);
+  if (activities.length < beforeRemoval) {
+    console.log(`[overlap-resolver] Removed ${beforeRemoval - activities.length} activities with backwards time`);
+  }
+  
+  // Sort activities by start time
+  activities.sort((a: any, b: any) => {
+    const timeA = normalizeTimeForSorting(a.start || a.startTime || '00:00');
+    const timeB = normalizeTimeForSorting(b.start || b.startTime || '00:00');
+    return timeA.localeCompare(timeB);
+  });
+  
+  // STEP 4: RESOLVE OVERLAPS WITHIN THE REMAINING ACTIVITIES
   for (let i = 1; i < activities.length; i++) {
     const prev = activities[i - 1];
     const curr = activities[i];
@@ -823,34 +1075,110 @@ function resolveTimeOverlaps(activities: any[]): any[] {
     const prevEnd = normalizeTimeForSorting(prev.end || prev.endTime || '00:00');
     const currStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
     
-    if (currStart < prevEnd) {
-      // OVERLAP DETECTED - Fix it
+    // Check for overlaps or immediate conflicts
+    if (currStart <= prevEnd) {
       const prevName = prev.title || prev.name || prev.activity?.name || 'Activity';
       const currName = curr.title || curr.name || curr.activity?.name || 'Activity';
       
-      console.log(`[overlap-resolver] FIXING: "${prevName}" (ends ${convertTo12Hour(prevEnd)}) overlaps "${currName}" (starts ${convertTo12Hour(currStart)})`);
+      console.log(`[overlap-resolver] FIXING: "${prevName}" (ends ${convertTo12Hour(prevEnd)}) conflicts with "${currName}" (starts ${convertTo12Hour(currStart)})`);
       
-      // Strategy: Move current activity to start right after previous ends
-      const newStartTime12 = convertTo12Hour(prevEnd);
-      const newStart24 = prevEnd;
+      // Strategy: Schedule current activity immediately after previous with small buffer
+      const bufferMinutes = 15;
+      const newStart24 = addMinutesToTime(prevEnd, bufferMinutes);
+      const newStartTime12 = convertTo12Hour(newStart24);
       
-      // Calculate original duration
-      const originalEnd = normalizeTimeForSorting(curr.end || curr.endTime || '00:00');
-      const originalStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
-      const durationMinutes = getTimeDiffMinutes(originalStart, originalEnd);
+      // Determine appropriate duration for this activity
+      let durationMinutes = 90; // Default
+      const activityType = curr.type || curr.activity?.category || 'activity';
+      const availability = curr.availability || curr.activity?.availability || '';
       
-      // Calculate new end time maintaining duration
-      const newEnd24 = addMinutesToTime(newStart24, Math.max(durationMinutes, 60)); // Minimum 1 hour
+      if (activityType === 'restaurant') durationMinutes = 120;
+      else if (activityType === 'museum') durationMinutes = 180;
+      else if (activityType === 'activity') durationMinutes = 150;
+      
+      // Try to preserve original duration if reasonable
+      try {
+        const originalEnd = normalizeTimeForSorting(curr.end || curr.endTime || '00:00');
+        const originalStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
+        const originalDuration = getTimeDiffMinutes(originalStart, originalEnd);
+        if (originalDuration > 0 && originalDuration <= 240) { // Up to 4 hours max
+          durationMinutes = originalDuration;
+        }
+      } catch (e) {
+        // Use default duration
+      }
+      
+      // Calculate new end time
+      const newEnd24 = addMinutesToTime(newStart24, durationMinutes);
       const newEndTime12 = convertTo12Hour(newEnd24);
       
-      // Update the current activity
-      curr.start = newStartTime12;
-      curr.startTime = newStartTime12;
-      curr.end = newEndTime12;
-      curr.endTime = newEndTime12;
-      curr.timeBlock = `${newStartTime12} - ${newEndTime12}`;
+      // Check business hours constraint
+      if (availability && !isWithinBusinessHours(newStartTime12, newEndTime12, availability)) {
+        console.log(`[overlap-resolver] "${currName}" (${newStartTime12}-${newEndTime12}) conflicts with business hours ${availability}`);
+        
+        // Try to find an alternative time slot earlier in the day
+        const alternativeSlot = findEarlierTimeSlot(activities, i, durationMinutes, availability);
+        
+        if (alternativeSlot) {
+          console.log(`[overlap-resolver] ✓ RESCHEDULED: "${currName}" moved to ${alternativeSlot.start} - ${alternativeSlot.end}`);
+          curr.start = alternativeSlot.start;
+          curr.startTime = alternativeSlot.start;
+          curr.end = alternativeSlot.end;
+          curr.endTime = alternativeSlot.end;
+          curr.timeBlock = `${alternativeSlot.start} - ${alternativeSlot.end}`;
+        } else {
+          // Can't fit anywhere - offer replacement or removal
+          console.log(`[overlap-resolver] 🚫 REMOVING: "${currName}" - cannot fit in schedule within business hours`);
+          
+          // Try to replace with a similar activity that has better hours
+          const replacement = suggestReplacementActivity(curr);
+          if (replacement) {
+            console.log(`[overlap-resolver] ✓ REPLACED: "${currName}" → "${replacement.name}"`);
+            // Update activity with replacement
+            Object.assign(curr, replacement);
+            curr.start = newStartTime12;
+            curr.startTime = newStartTime12;
+            curr.end = newEndTime12;
+            curr.endTime = newEndTime12;
+            curr.timeBlock = `${newStartTime12} - ${newEndTime12}`;
+          } else {
+            // Remove this activity completely
+            activities.splice(i, 1);
+            i--; // Adjust index since we removed an item
+            continue;
+          }
+        }
+      } else {
+        // Normal case - just update the times
+        curr.start = newStartTime12;
+        curr.startTime = newStartTime12;
+        curr.end = newEndTime12;
+        curr.endTime = newEndTime12;
+        curr.timeBlock = `${newStartTime12} - ${newEndTime12}`;
+        
+        console.log(`[overlap-resolver] ✓ FIXED: "${currName}" moved to ${newStartTime12} - ${newEndTime12}`);
+      }
+    }
+    
+    // Additional check: if there's a big gap, suggest moving the activity earlier
+    else if (getTimeDiffMinutes(prevEnd, currStart) > 90) { // Gap > 1.5 hours
+      const gapMinutes = getTimeDiffMinutes(prevEnd, currStart);
+      const prevName = prev.title || prev.name || prev.activity?.name || 'Activity';
+      const currName = curr.title || curr.name || curr.activity?.name || 'Activity';
       
-      console.log(`[overlap-resolver] ✓ FIXED: "${currName}" moved to ${newStartTime12} - ${newEndTime12}`);
+      console.log(`[overlap-resolver] Large gap detected: ${Math.floor(gapMinutes/60)}h ${gapMinutes%60}m between "${prevName}" and "${currName}"`);
+      
+      // Try to move current activity earlier to fill the gap
+      const newStart24 = addMinutesToTime(prevEnd, 30); // 30 min buffer
+      const newStartTime12 = convertTo12Hour(newStart24);
+      const availability = curr.availability || curr.activity?.availability || '';
+      
+      if (!availability || isWithinBusinessHours(newStartTime12, curr.end || curr.endTime || '', availability)) {
+        curr.start = newStartTime12;
+        curr.startTime = newStartTime12;
+        curr.timeBlock = `${newStartTime12} - ${curr.end || curr.endTime}`;
+        console.log(`[overlap-resolver] ✓ MOVED EARLIER: "${currName}" now starts at ${newStartTime12}`);
+      }
     }
   }
   
@@ -858,24 +1186,229 @@ function resolveTimeOverlaps(activities: any[]): any[] {
 }
 
 /**
- * Add minutes to a 24-hour time string
+ * Add minutes to a 24-hour time string with daily cap validation
  */
 function addMinutesToTime(time24: string, minutes: number): string {
   const [hour, min] = time24.split(':').map(Number);
   let totalMinutes = hour * 60 + min + minutes;
   
-  // Cap at 10 PM (22:00) to avoid midnight shifts
-  if (totalMinutes > 22 * 60) totalMinutes = 22 * 60;
+  // HARD CAP: Never go past 10:30 PM (22:30)
+  const maxMinutes = 22 * 60 + 30; // 10:30 PM
+  
+  if (totalMinutes > maxMinutes) {
+    console.warn(`[addMinutesToTime] Capping at 10:30 PM - was going to be ${Math.floor(totalMinutes/60)}:${String(totalMinutes%60).padStart(2,'0')}`);
+    totalMinutes = maxMinutes;
+  }
   
   const newHour = Math.floor(totalMinutes / 60);
   const newMin = totalMinutes % 60;
+  
   return `${newHour.toString().padStart(2, '0')}:${newMin.toString().padStart(2, '0')}`;
 }
 
 /**
- * Extract requested end time from user feedback
- * Examples: "end by 9pm" → "21:00", "make it end earlier around 6pm" → "18:00"
+ * Check if an activity can be scheduled at the given time based on availability
  */
+function isWithinBusinessHours(startTime: string, endTime: string, availability: string): boolean {
+  if (!availability) return true; // No restrictions
+  
+  try {
+    // Parse availability like "9am-10pm" or "5pm-10:30pm"  
+    const availMatch = availability.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?\s*-\s*(\d{1,2}):?(\d{2})?\s*(am|pm)/i);
+    if (!availMatch) return true; // Can't parse, assume available
+    
+    const openHour = parseInt(availMatch[1]);
+    const openMin = parseInt(availMatch[2] || '0');
+    const openAmPm = availMatch[3]?.toLowerCase() || (openHour < 12 ? 'am' : 'pm');
+    
+    const closeHour = parseInt(availMatch[4]);
+    const closeMin = parseInt(availMatch[5] || '0');
+    const closeAmPm = availMatch[6]?.toLowerCase();
+    
+    // Convert to 24-hour format
+    let open24Hour = openHour;
+    if (openAmPm === 'pm' && openHour !== 12) open24Hour += 12;
+    if (openAmPm === 'am' && openHour === 12) open24Hour = 0;
+    
+    let close24Hour = closeHour;
+    if (closeAmPm === 'pm' && closeHour !== 12) close24Hour += 12;
+    if (closeAmPm === 'am' && closeHour === 12) close24Hour = 0;
+    
+    const openTime24 = `${open24Hour.toString().padStart(2, '0')}:${openMin.toString().padStart(2, '0')}`;
+    const closeTime24 = `${close24Hour.toString().padStart(2, '0')}:${closeMin.toString().padStart(2, '0')}`;
+    
+    const actStart24 = normalizeTimeForSorting(startTime);
+    const actEnd24 = normalizeTimeForSorting(endTime);
+    
+    const isValid = actStart24 >= openTime24 && actEnd24 <= closeTime24;
+    
+    if (!isValid) {
+      console.log(`[business-hours] Activity ${startTime}-${endTime} is outside business hours ${availability}`);
+    }
+    
+    return isValid;
+  } catch (e) {
+    console.warn(`[business-hours] Could not parse availability "${availability}":`, e);
+    return true; // Assume available if can't parse
+  }
+}
+
+/**
+ * Find an earlier time slot that can accommodate an activity
+ */
+function findEarlierTimeSlot(activities: any[], currentIndex: number, durationMinutes: number, availability: string): { start: string; end: string } | null {
+  // Look for gaps before the current activity
+  for (let i = 0; i < currentIndex; i++) {
+    const prev = i === 0 ? null : activities[i - 1];
+    const next = activities[i];
+    
+    let gapStart: string;
+    let gapEnd: string;
+    
+    if (prev === null) {
+      // Gap from start of day
+      gapStart = '08:00'; // Start at 8 AM
+      gapEnd = normalizeTimeForSorting(next.start || next.startTime || '00:00');
+    } else {
+      // Gap between activities
+      gapStart = normalizeTimeForSorting(prev.end || prev.endTime || '00:00');
+      gapEnd = normalizeTimeForSorting(next.start || next.startTime || '00:00');
+    }
+    
+    // Check if gap is large enough
+    const gapMinutes = getTimeDiffMinutes(gapStart, gapEnd);
+    if (gapMinutes >= durationMinutes + 15) { // Need duration + 15 min buffer
+      // Try to schedule in this gap
+      const bufferStart = addMinutesToTime(gapStart, prev === null ? 0 : 15);
+      const proposedEnd24 = addMinutesToTime(bufferStart, durationMinutes);
+      
+      const proposedStart12 = convertTo12Hour(bufferStart);
+      const proposedEnd12 = convertTo12Hour(proposedEnd24);
+      
+      // Check if it fits within business hours
+      if (!availability || isWithinBusinessHours(proposedStart12, proposedEnd12, availability)) {
+        return {
+          start: proposedStart12,
+          end: proposedEnd12
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Suggest a replacement activity with better operating hours or real-world alternatives
+ */
+function suggestReplacementActivity(originalActivity: any): any | null {
+  const activityType = originalActivity.type || originalActivity.activity?.category || 'activity';
+  const activityName = originalActivity.title || originalActivity.name || originalActivity.activity?.name || '';
+  
+  console.log(`[replacement] Looking for replacement for ${activityType}: "${activityName}"`);
+  
+  // Enhanced replacement suggestions with real-world options
+  const replacements: Record<string, any[]> = {
+    'restaurant': [
+      {
+        title: "24-hour Diner",
+        type: "restaurant",
+        notes: "Classic American diner open 24 hours",
+        availability: "24/7",
+        duration: "1 hour",
+        price: 20,
+        rating: 4.2
+      },
+      {
+        title: "Halal Guys",
+        type: "restaurant", 
+        notes: "Famous NYC street food, late hours",
+        availability: "11am-4am",
+        duration: "45 minutes",
+        price: 15,
+        rating: 4.1
+      },
+      {
+        title: "Katz's Delicatessen",
+        type: "restaurant",
+        notes: "Iconic NYC deli, famous pastrami sandwich",
+        availability: "8am-10:45pm",
+        duration: "1 hour",
+        price: 25,
+        rating: 4.6
+      }
+    ],
+    'activity': [
+      {
+        title: "Evening Walk in Central Park",
+        type: "activity",
+        notes: "Peaceful evening stroll through the park",
+        availability: "24/7",
+        duration: "1 hour",
+        price: 0,
+        rating: 4.5
+      },
+      {
+        title: "Times Square Night Tour",
+        type: "activity",
+        notes: "Experience the bright lights of Times Square at night",
+        availability: "24/7", 
+        duration: "1.5 hours",
+        price: 25,
+        rating: 4.3
+      },
+      {
+        title: "Brooklyn Bridge Walk",
+        type: "activity",
+        notes: "Scenic walk across the iconic Brooklyn Bridge",
+        availability: "24/7",
+        duration: "1 hour",
+        price: 0,
+        rating: 4.7
+      }
+    ],
+    'museum': [
+      {
+        title: "Whitney Museum of American Art",
+        type: "museum",
+        notes: "Contemporary American art with evening hours",
+        availability: "10:30am-10pm", 
+        duration: "2 hours",
+        price: 25,
+        rating: 4.4
+      },
+      {
+        title: "Museum at FIT",
+        type: "museum",
+        notes: "Fashion and design museum, free admission",
+        availability: "12pm-8pm",
+        duration: "1.5 hours",
+        price: 0,
+        rating: 4.2
+      }
+    ]
+  };
+  
+  const options = replacements[activityType];
+  if (options && options.length > 0) {
+    // Return the first suitable replacement
+    const replacement = { ...options[0] };
+    replacement.source = "suggested_replacement";
+    replacement.partner = false;
+    replacement.addFromOurRecommendation = false;
+    replacement.currency = "USD";
+    replacement.earnPoints = 0;
+    replacement.images = ["https://images.unsplash.com/photo-1518998053901-5348d3961a04?w=400"];
+    replacement.highlights = ["Real NYC location", "Flexible timing"];
+    
+    console.log(`[replacement] ✓ Found real-world replacement: "${replacement.title}"`);
+    return replacement;
+  }
+  
+  console.log(`[replacement] No suitable replacement found for ${activityType}`);
+  return null;
+}
+
 function extractRequestedEndTime(feedback: string): string | null {
   if (!feedback) return null;
   

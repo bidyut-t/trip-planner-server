@@ -120,6 +120,7 @@ export async function runOpenAiPromptWithMcp(prompt: string): Promise<string> {
 
   const maxIterations = 5;
   let iteration = 0;
+  const toolCallHistory = new Map(); // Track tool calls to prevent infinite loops
 
   while (iteration < maxIterations) {
     iteration++;
@@ -163,6 +164,20 @@ export async function runOpenAiPromptWithMcp(prompt: string): Promise<string> {
     console.log(
       `[openai-mcp] Processing ${message.tool_calls.length} tool calls`,
     );
+
+    // Check for infinite loops - same tool called multiple times
+    for (const toolCall of message.tool_calls) {
+      const toolKey = toolCall.function.name;
+      const callCount = (toolCallHistory.get(toolKey) || 0) + 1;
+      toolCallHistory.set(toolKey, callCount);
+      
+      if (callCount >= 3 && iteration >= 3) {
+        console.warn(`[openai-mcp] 🔄 INFINITE LOOP DETECTED: "${toolKey}" called ${callCount} times. Forcing fallback response.`);
+        // Return a fallback response instead of continuing the loop
+        const fallbackResponse = `I apologize, but I'm having trouble finding exactly what you requested in our partner database. Let me suggest some alternative options that might work for you.`;
+        return fallbackResponse;
+      }
+    }
 
     for (const toolCall of message.tool_calls) {
       if (!mcpClient) {
