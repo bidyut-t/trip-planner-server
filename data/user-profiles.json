@@ -17,10 +17,11 @@
         "hotelId": "jw-marriott-essex-house",
         "hotelName": "JW Marriott Essex House New York",
         "city": "New York City",
-        "checkInDate": "2026-06-14",
-        "checkOutDate": "2026-06-16",
-        "confirmationNumber": "MR123456789",
-        "isMarriottProperty": true
+        "checkInDate": "2026-07-01",
+        "checkOutDate": "2026-07-04",
+        "confirmationNumber": "MB-NYC-789456",
+        "isMarriottProperty": true,
+        "roomType": "Deluxe King Suite"
       }
     ]
   },
