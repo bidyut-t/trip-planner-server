@@ -5,7 +5,7 @@
     "city": "New York City",
     "address": "160 Central Park South, New York, NY 10019",
     "description": "Luxury property perfectly positioned across from Central Park with easy access to your planned museums and fine dining experiences.",
-    "tags": ["luxury", "central-park-views", "fine-dining", "spa", "concierge-service"],
+    "tags": ["central-park-views", "fine-dining", "spa", "concierge-service"],
     "durationMinutes": 1440,
     "priority": 10,
     "latitude": 40.7677,
@@ -17,6 +17,7 @@
     "pricePerNight": 450,
     "currency": "$",
     "bonvoyPoints": 60000,
+    "distanceFromActivities": "0.4 mi avg from your planned activities",
     "images": ["https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400"],
     "amenities": ["Spa", "Restaurant", "Fitness Center", "Concierge", "Room Service"],
     "bookingUrl": "https://www.marriott.com/"
@@ -39,6 +40,7 @@
     "pricePerNight": 380,
     "currency": "$",
     "bonvoyPoints": 50000,
+    "distanceFromActivities": "0.6 mi avg from your planned activities",
     "images": ["https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?w=400"],
     "amenities": ["Restaurant", "Lounge", "Fitness Center", "Business Center"],
     "bookingUrl": "https://www.marriott.com/"
@@ -61,6 +63,7 @@
     "pricePerNight": 320,
     "currency": "$",
     "bonvoyPoints": 40000,
+    "distanceFromActivities": "0.5 mi avg from your planned activities",
     "images": ["https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400"],
     "amenities": ["Fitness Center", "Restaurant", "Free WiFi", "Business Center"],
     "bookingUrl": "https://www.marriott.com/"

@@ -136,9 +136,13 @@ async function addHotelRecommendationsIfNeeded(
     // Take at least 3 hotels (or all available if less than 3)
     const finalRecommendations = recommendationHotels.slice(0, Math.max(3, recommendationHotels.length));
     
-    // Calculate average distance for each hotel (mock calculation)
+    // Calculate average distance for each hotel
     const calculateDistance = (hotel: any) => {
-      // Mock distance calculation based on hotel location
+      // Use distanceFromActivities from data if available
+      if (hotel.distanceFromActivities) {
+        return hotel.distanceFromActivities;
+      }
+      // Fallback to mock distance calculation based on hotel location
       if (hotel.tags.includes('central-park') || hotel.tags.includes('midtown')) return '0.4 mi avg';
       if (hotel.tags.includes('downtown')) return '1.2 mi avg'; 
       return '0.8 mi avg';
