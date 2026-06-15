@@ -8,6 +8,16 @@ import { z } from "zod";
  * travel style, and personal preferences for AI-powered personalization.
  */
 
+export interface HotelBooking {
+  hotelId?: string;
+  hotelName: string;
+  city: string;
+  checkInDate: string;
+  checkOutDate: string;
+  confirmationNumber?: string;
+  isMarriottProperty?: boolean;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -21,7 +31,19 @@ export interface UserProfile {
     preferLocalExperiences: boolean;
     fitnessLevel: "low" | "moderate" | "high";
   };
+  hotelBookings?: HotelBooking[];
 }
+
+// Zod schema for hotel booking validation
+export const hotelBookingSchema = z.object({
+  hotelId: z.string().optional(),
+  hotelName: z.string(),
+  city: z.string(),
+  checkInDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  checkOutDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  confirmationNumber: z.string().optional(),
+  isMarriottProperty: z.boolean().default(false),
+});
 
 // Zod schema for runtime validation and type safety
 export const userProfileSchema = z.object({
@@ -37,4 +59,5 @@ export const userProfileSchema = z.object({
     preferLocalExperiences: z.boolean().default(true),
     fitnessLevel: z.enum(["low", "moderate", "high"]).default("moderate"),
   }).default({}),
+  hotelBookings: z.array(hotelBookingSchema).default([]),
 });

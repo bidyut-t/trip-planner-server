@@ -12,6 +12,7 @@ import {
   loadPartnerCabs,
   loadPartnerGames,
   loadPartnerRestaurants,
+  loadPartnerHotels,
   resolveDestination,
   type DestinationMeta,
 } from "../services/catalog/catalog.service.js";
@@ -130,6 +131,8 @@ server.registerTool(
   async ({ city, destination }) =>
     jsonText(await loadPartnerGames(normalizeCityInput(destination, city)))
 );
+
+// NOTE: Hotels are not included as MCP tools since they're handled programmatically
 
 // server.registerTool(
 //   "get_catalog_bundle",

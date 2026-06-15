@@ -88,6 +88,10 @@ export async function loadPartnerGames(city?: string): Promise<PartnerItem[]> {
   return loadPartners("partners.games.json", city);
 }
 
+export async function loadPartnerHotels(city?: string): Promise<PartnerItem[]> {
+  return loadPartners("partners.hotels.json", city);
+}
+
 /**
  * Load user profiles from JSON file
  * 
