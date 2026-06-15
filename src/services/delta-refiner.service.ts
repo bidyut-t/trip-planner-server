@@ -168,7 +168,21 @@ FALLBACK STRATEGY:
 - **NO activities starting after 10:00 PM**  
 - **NO activities ending after 10:30 PM**
 - **NO backwards time** (like "11:30 PM - 10:00 PM")
+- **NO BACK-TO-BACK RESTAURANTS** - Never schedule two restaurants consecutively!
 - If an activity can't fit before 10 PM → **REMOVE IT**
+
+**CRITICAL: NO BACK-TO-BACK MEALS - LOGICAL SEQUENCING:**
+- NEVER schedule two restaurant/food activities consecutively  
+- NEVER have dinner immediately followed by another restaurant
+- ALWAYS alternate: meal → activity → meal → activity
+- Example CORRECT: Lunch → Museum → Dinner
+- Example WRONG: Lunch → Coffee Shop → Dinner (two food places!)
+- Example WRONG: Restaurant 7pm → Restaurant 9pm (back-to-back!)
+- When adding a restaurant, check the activity BEFORE and AFTER it
+- If adjacent activity is also a restaurant, you MUST:
+  * Option 1: REMOVE the existing restaurant and add yours
+  * Option 2: Find a different time slot with non-food activities around it
+  * Option 3: Suggest a different type of activity instead
 
 **INTELLIGENT MODIFICATION STRATEGIES**:
 
@@ -574,7 +588,40 @@ Reply with JSON only.`;
       }
     }
     
-    // Check 4: If user requested "end by [TIME]", validate STRICTLY
+    // Check 4: NO BACK-TO-BACK RESTAURANTS - validate in final plan after applying deltas
+    console.log('[delta-refiner] Checking for back-to-back restaurants...');
+    const tempPlanForCheck = applyDeltasToPlan(originalPlan, delta);
+    const activitiesForCheck = tempPlanForCheck.days?.[0]?.blocks || [];
+    
+    for (let i = 1; i < activitiesForCheck.length; i++) {
+      const prev = activitiesForCheck[i - 1] as any;
+      const curr = activitiesForCheck[i] as any;
+      
+      const prevType = prev.type || prev.activity?.type;
+      const currType = curr.type || curr.activity?.type;
+      
+      // Check if both are restaurants
+      if (prevType === 'restaurant' && currType === 'restaurant') {
+        const prevName = prev.title || prev.name || 'Restaurant';
+        const currName = curr.title || curr.name || 'Restaurant';
+        
+        console.error(`[delta-refiner] ❌ BACK-TO-BACK RESTAURANTS: "${prevName}" followed by "${currName}"`);
+        throw new Error(
+          `BACK-TO-BACK RESTAURANTS ERROR: You scheduled "${prevName}" immediately followed by "${currName}".\n\n` +
+          `This makes no sense! People don't eat at two restaurants in a row.\n\n` +
+          `CURRENT TIMELINE:\n${activitiesForCheck.map((a: any, idx: number) => `  ${idx + 1}. [${a.start || a.startTime}-${a.end || a.endTime}] ${a.title || a.name} (${a.type})`).join('\n')}\n\n` +
+          `HOW TO FIX:\n` +
+          `Option 1: REMOVE the existing restaurant "${prevName}" and add your restaurant\n` +
+          `Option 2: Find a different time slot where the adjacent activities are NOT restaurants\n` +
+          `Option 3: Add a non-food activity between them (museum, park, etc.)\n\n` +
+          `Activities should alternate: meal → activity → meal, NOT meal → meal!`
+        );
+      }
+    }
+    
+    console.log('[delta-refiner] ✓ No back-to-back restaurants found');
+    
+    // Check 5: If user requested "end by [TIME]", validate STRICTLY
     const requestedEndTime = extractRequestedEndTime(feedback);
     if (requestedEndTime) {
       console.log(`[delta-refiner] User requested to end by: ${convertTo12Hour(requestedEndTime)}`);
@@ -699,6 +746,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
     switch (op.type) {
       case "add": {
         // Convert new activities to the schema format
+        // MARK AS NEWLY ADDED - this helps overlap resolver prioritize user-requested activities
         const newActivities = op.activities.map(act => ({
           start: act.start,
           end: act.end,
@@ -721,6 +769,7 @@ export function applyDeltasToPlan(originalPlan: TripPlan, delta: RefinementDelta
           highlights: act.highlights || [],
           availability: act.availability,
           cancellationPolicy: act.cancellationPolicy,
+          _isNewlyAdded: true, // CRITICAL FLAG: Tells overlap resolver to prioritize this
         }));
 
         // SMART PLACEMENT: Apply time adjustments first
@@ -1080,9 +1129,41 @@ function resolveTimeOverlaps(activities: any[]): any[] {
       const prevName = prev.title || prev.name || prev.activity?.name || 'Activity';
       const currName = curr.title || curr.name || curr.activity?.name || 'Activity';
       
-      console.log(`[overlap-resolver] FIXING: "${prevName}" (ends ${convertTo12Hour(prevEnd)}) conflicts with "${currName}" (starts ${convertTo12Hour(currStart)})`);
+      console.log(`[overlap-resolver] CONFLICT: "${prevName}" (ends ${convertTo12Hour(prevEnd)}) vs "${currName}" (starts ${convertTo12Hour(currStart)})`);
       
-      // Strategy: Schedule current activity immediately after previous with small buffer
+      // SMART PRIORITY: Prefer keeping USER-REQUESTED activities
+      const currIsNew = curr._isNewlyAdded === true;
+      const prevIsNew = prev._isNewlyAdded === true;
+      
+      if (currIsNew && !prevIsNew) {
+        console.log(`[overlap-resolver] 🎯 PRIORITIZING USER-REQUESTED: "${currName}" - will try to shorten previous activity`);
+        
+        // Strategy: Try to shorten the previous activity to make room for the new one
+        const currEnd = normalizeTimeForSorting(curr.end || curr.endTime || '00:00');
+        const bufferMinutes = 15;
+        
+        // Calculate when previous should end to make room
+        const idealPrevEnd24 = subtractMinutes(currStart, bufferMinutes);
+        const idealPrevEnd12 = convertTo12Hour(idealPrevEnd24);
+        
+        // Check if previous activity can be shortened
+        const prevStart24 = normalizeTimeForSorting(prev.start || prev.startTime || '00:00');
+        const newPrevDuration = getTimeDiffMinutes(prevStart24, idealPrevEnd24);
+        
+        if (newPrevDuration >= 60) { // Minimum 1 hour
+          console.log(`[overlap-resolver] ✂️ SHORTENING: "${prevName}" end time ${convertTo12Hour(prevEnd)} → ${idealPrevEnd12}`);
+          prev.end = idealPrevEnd12;
+          prev.endTime = idealPrevEnd12;
+          prev.timeBlock = `${prev.start || prev.startTime} - ${idealPrevEnd12}`;
+          console.log(`[overlap-resolver] ✓ KEPT USER-REQUESTED: "${currName}" at original time ${convertTo12Hour(currStart)} - ${convertTo12Hour(currEnd)}`);
+          continue; // Keep current activity at its original time
+        } else {
+          console.log(`[overlap-resolver] ⚠️ Cannot shorten "${prevName}" enough (would be ${newPrevDuration} min, need 60+ min)`);
+          // Fall through to standard resolution
+        }
+      }
+      
+      // Standard resolution: Move current activity after previous
       const bufferMinutes = 15;
       const newStart24 = addMinutesToTime(prevEnd, bufferMinutes);
       const newStartTime12 = convertTo12Hour(newStart24);
@@ -1116,7 +1197,51 @@ function resolveTimeOverlaps(activities: any[]): any[] {
       if (availability && !isWithinBusinessHours(newStartTime12, newEndTime12, availability)) {
         console.log(`[overlap-resolver] "${currName}" (${newStartTime12}-${newEndTime12}) conflicts with business hours ${availability}`);
         
-        // Try to find an alternative time slot earlier in the day
+        // SPECIAL HANDLING FOR USER-REQUESTED ACTIVITIES
+        if (currIsNew) {
+          console.log(`[overlap-resolver] 🎯 USER-REQUESTED ACTIVITY - trying harder to fit "${currName}"`);
+          
+          // Strategy 1: Try to find an earlier time slot
+          const alternativeSlot = findEarlierTimeSlot(activities, i, durationMinutes, availability);
+          if (alternativeSlot) {
+            console.log(`[overlap-resolver] ✓ RESCHEDULED EARLIER: "${currName}" moved to ${alternativeSlot.start} - ${alternativeSlot.end}`);
+            curr.start = alternativeSlot.start;
+            curr.startTime = alternativeSlot.start;
+            curr.end = alternativeSlot.end;
+            curr.endTime = alternativeSlot.end;
+            curr.timeBlock = `${alternativeSlot.start} - ${alternativeSlot.end}`;
+            continue;
+          }
+          
+          // Strategy 2: Remove a non-requested activity to make room
+          console.log(`[overlap-resolver] Looking for non-requested activities to remove...`);
+          let removedSomething = false;
+          for (let j = 0; j < activities.length; j++) {
+            if (j === i) continue;
+            const candidate = activities[j];
+            if (candidate._isNewlyAdded !== true) {
+              const candidateName = candidate.title || candidate.name || 'Activity';
+              console.log(`[overlap-resolver] 🔄 REMOVING non-requested "${candidateName}" to make room for user-requested "${currName}"`);
+              activities.splice(j, 1);
+              if (j < i) i--; // Adjust index
+              removedSomething = true;
+              
+              // Now try to fit the new activity at its original time
+              const originalStart = normalizeTimeForSorting(curr.start || curr.startTime || '00:00');
+              const originalEnd = normalizeTimeForSorting(curr.end || curr.endTime || '00:00');
+              console.log(`[overlap-resolver] ✓ KEPT USER-REQUESTED: "${currName}" at original time ${convertTo12Hour(originalStart)} - ${convertTo12Hour(originalEnd)}`);
+              break;
+            }
+          }
+          
+          if (removedSomething) {
+            continue; // Skip to next iteration, we've handled this conflict
+          }
+          
+          console.log(`[overlap-resolver] ⚠️ Could not find a slot for user-requested "${currName}" - will still try to add it`);
+        }
+        
+        // Standard handling for non-user-requested activities
         const alternativeSlot = findEarlierTimeSlot(activities, i, durationMinutes, availability);
         
         if (alternativeSlot) {
@@ -1179,6 +1304,29 @@ function resolveTimeOverlaps(activities: any[]): any[] {
         curr.timeBlock = `${newStartTime12} - ${curr.end || curr.endTime}`;
         console.log(`[overlap-resolver] ✓ MOVED EARLIER: "${currName}" now starts at ${newStartTime12}`);
       }
+    }
+  }
+  
+  // CRITICAL: Check for back-to-back restaurants and fix them
+  console.log('[overlap-resolver] Checking for back-to-back restaurants...');
+  for (let i = 1; i < activities.length; i++) {
+    const prev = activities[i - 1];
+    const curr = activities[i];
+    
+    const prevType = prev.type || prev.activity?.type;
+    const currType = curr.type || curr.activity?.type;
+    
+    // If both are restaurants, we need to insert something between them or remove one
+    if (prevType === 'restaurant' && currType === 'restaurant') {
+      const prevName = prev.title || prev.name || 'Restaurant';
+      const currName = curr.title || curr.name || 'Restaurant';
+      
+      console.warn(`[overlap-resolver] 🍽️ BACK-TO-BACK RESTAURANTS: "${prevName}" → "${currName}"`);
+      
+      // Strategy: Remove the second restaurant (keep the first one)
+      console.log(`[overlap-resolver] 🚫 REMOVING back-to-back restaurant: "${currName}"`);
+      activities.splice(i, 1);
+      i--; // Adjust index since we removed an item
     }
   }
   
