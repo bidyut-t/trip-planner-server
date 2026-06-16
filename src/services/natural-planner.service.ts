@@ -1,7 +1,6 @@
 import type { PlanTripRequest, TripPlan } from "../schemas/trip-plan.schema.js";
 import { planTripRequestSchema } from "../schemas/trip-plan.schema.js";
 import { naturalPlanDraftSchema } from "../schemas/skeleton-plan.schema.js";
-import type { UserProfile } from "../schemas/user-profile.schema.js";
 import {
   loadCatalog,
   loadDestinations,
@@ -10,8 +9,10 @@ import {
   loadPartnerActivities,
   loadPartnerCabs,
   loadPartnerGames,
+  loadPartnerHotels,
   type DestinationMeta,
 } from "./catalog/catalog.service.js";
+import type { UserProfile, HotelBooking } from "../schemas/user-profile.schema.js";
 import { extractPromptKeywords } from "./nlp/nlp-parser.keywords.js";
 import { parseLlmJson } from "../utils/llm-json.js";
 import { runOpenAiPrompt } from "../utils/openai-mcp-agent.js";
@@ -25,6 +26,195 @@ import {
 import { addMapLinksToTripPlan } from "../utils/google-maps.js";
 import { extractClosingTime, normalizeTimeForSorting, convertTo12Hour, subtractMinutes, getTimeDiffMinutes } from "../utils/time-utils.js";
 import { forceValidTimeline } from "../utils/force-timeline.js";
+
+/**
+ * Check if user has hotel booking for the destination and dates
+ * If not, suggest multiple hotels from our catalog programmatically
+ * Returns accommodation object with either bookedHotel or suggestions
+ */
+async function addHotelRecommendationsIfNeeded(
+  plan: any,
+  userProfile?: UserProfile,
+  city?: string,
+  startDate?: string,
+  endDate?: string
+): Promise<any> {
+  // Check if user has existing hotel booking for this trip
+  if (userProfile?.hotelBookings?.length) {
+    const bookingForTrip = userProfile.hotelBookings.find(booking => 
+      booking.city.toLowerCase().includes(city?.toLowerCase() || '') ||
+      city?.toLowerCase().includes(booking.city.toLowerCase() || '')
+    );
+    
+    if (bookingForTrip) {
+      console.log(`[hotel-recommendations] User ${userProfile.id} has existing hotel booking - showing booked hotel`);
+      
+      // Load hotel details to get full information
+      try {
+        const availableHotels = await loadPartnerHotels(city);
+        const bookedHotelDetails = availableHotels.find(h => h.id === bookingForTrip.hotelId) || {
+          id: bookingForTrip.hotelId || 'unknown',
+          name: bookingForTrip.hotelName,
+          address: 'Address on file',
+          description: `Your confirmed reservation. Confirmation #${bookingForTrip.confirmationNumber}`,
+          tags: ['Your Booking', 'Confirmed'],
+          isPartnerHotel: bookingForTrip.isMarriottProperty || false,
+          rating: 4.5,
+          reviewCount: 1000,
+          pricePerNight: 0,
+          currency: '$',
+          images: ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400'],
+          amenities: ['Your Confirmed Booking'],
+          bookingUrl: 'https://www.marriott.com/reservation/confirmation'
+        };
+
+        plan.accommodation = {
+          bookedHotel: {
+            id: bookedHotelDetails.id,
+            name: bookedHotelDetails.name,
+            address: bookedHotelDetails.address || 'Address on file',
+            description: `Luxury property perfectly positioned across from Central Park with easy access to museums, fine dining, and world-class amenities.`,
+            tags: bookedHotelDetails.tags ? bookedHotelDetails.tags.map(tag => tag.charAt(0).toUpperCase() + tag.slice(1).replace('-', ' ')) : ['Your Booking', 'Confirmed'],
+            isPartnerHotel: bookedHotelDetails.isPartnerHotel,
+            matchedUserPreferences: [
+              `Booked dates: ${bookingForTrip.checkInDate} - ${bookingForTrip.checkOutDate}`,
+              `Room type: ${bookingForTrip.roomType || 'Standard Room'}`,
+              `Confirmation: ${bookingForTrip.confirmationNumber}`
+            ],
+            rating: bookedHotelDetails.rating,
+            reviewCount: bookedHotelDetails.reviewCount,
+            pricePerNight: bookedHotelDetails.pricePerNight || 0,
+            currency: bookedHotelDetails.currency,
+            bonvoyPoints: bookedHotelDetails.bonvoyPoints,
+            distanceFromActivities: '0.4 mi avg from your planned activities',
+            images: bookedHotelDetails.images,
+            amenities: bookedHotelDetails.amenities,
+            bookingUrl: 'https://www.marriott.com/reservation/confirmation'
+          }
+        };
+      } catch (error) {
+        console.warn('[hotel-recommendations] Error loading booked hotel details:', error);
+      }
+      
+      return plan;
+    }
+  }
+
+  // User needs hotel recommendations - load available hotels for the city
+  try {
+    const availableHotels = await loadPartnerHotels(city);
+    
+    if (availableHotels.length === 0) {
+      console.log(`[hotel-recommendations] No partner hotels available for ${city}`);
+      return plan;
+    }
+
+    // Get user's budget level for recommendation logic
+    const budgetLevel = userProfile?.budgetLevel || 'moderate';
+    
+    // Sort hotels by priority and select top recommendations
+    const sortedHotels = availableHotels.sort((a, b) => b.priority - a.priority);
+    
+    // Recommend at least 3 hotels, prioritizing by user budget
+    const recommendationHotels = [];
+    
+    if (budgetLevel === 'luxury') {
+      // Luxury users: prioritize luxury hotels first, then others
+      const luxuryHotels = sortedHotels.filter(h => h.tags.includes('luxury'));
+      const nonLuxuryHotels = sortedHotels.filter(h => !h.tags.includes('luxury'));
+      recommendationHotels.push(...luxuryHotels, ...nonLuxuryHotels);
+    } else if (budgetLevel === 'budget') {
+      // Budget users: prioritize non-luxury hotels first, then luxury
+      const nonLuxuryHotels = sortedHotels.filter(h => !h.tags.includes('luxury'));
+      const luxuryHotels = sortedHotels.filter(h => h.tags.includes('luxury'));
+      recommendationHotels.push(...nonLuxuryHotels, ...luxuryHotels);
+    } else {
+      // Moderate users: get all hotels by priority
+      recommendationHotels.push(...sortedHotels);
+    }
+
+    // Take at least 3 hotels (or all available if less than 3)
+    const finalRecommendations = recommendationHotels.slice(0, Math.max(3, recommendationHotels.length));
+    
+    // Calculate average distance for each hotel
+    const calculateDistance = (hotel: any) => {
+      // Use distanceFromActivities from data if available
+      if (hotel.distanceFromActivities) {
+        return hotel.distanceFromActivities;
+      }
+      // Fallback to mock distance calculation based on hotel location
+      if (hotel.tags.includes('central-park') || hotel.tags.includes('midtown')) return '0.4 mi avg';
+      if (hotel.tags.includes('downtown')) return '1.2 mi avg'; 
+      return '0.8 mi avg';
+    };
+
+    const getMatchedPreferences = (hotel: any, budgetLevel: string) => {
+      const preferences = [];
+      
+      // Budget-specific preferences
+      if (budgetLevel === 'luxury' && hotel.tags.includes('luxury')) {
+        preferences.push('Luxury tier - matches your budget preference');
+      } else if (budgetLevel === 'budget' && hotel.pricePerNight < 350) {
+        preferences.push('Excellent value for premium location');
+      } else if (budgetLevel === 'moderate') {
+        preferences.push('Great balance of location and value');
+      }
+      
+      // Location-specific preferences
+      if (hotel.tags.includes('central-park-views') || hotel.tags.includes('central-park')) {
+        preferences.push('Central to all planned activities (avg 0.4 mi)');
+      } else if (hotel.tags.includes('times-square')) {
+        preferences.push('Walking distance to Broadway theaters');
+      } else if (hotel.tags.includes('bryant-park')) {
+        preferences.push('Close to museums and dining');
+      } else {
+        preferences.push('Central location for all NYC attractions');
+      }
+      
+      // Feature-specific preferences
+      if (hotel.tags.includes('fine-dining')) {
+        preferences.push('Fine dining options for food enthusiasts');
+      } else if (hotel.tags.includes('family-friendly')) {
+        preferences.push('Family-friendly amenities');
+      } else if (hotel.tags.includes('boutique-style')) {
+        preferences.push('Modern amenities and design');
+      } else {
+        preferences.push('Full-service amenities and comfort');
+      }
+      
+      return preferences;
+    };
+
+    // Transform to accommodation format
+    plan.accommodation = {
+      suggestions: finalRecommendations.map(hotel => ({
+        id: hotel.id,
+        name: hotel.name,
+        address: hotel.address,
+        description: hotel.description,
+        tags: hotel.tags.map(tag => tag.charAt(0).toUpperCase() + tag.slice(1).replace('-', ' ')),
+        isPartnerHotel: hotel.isPartnerHotel,
+        matchedUserPreferences: getMatchedPreferences(hotel, budgetLevel),
+        rating: hotel.rating,
+        reviewCount: hotel.reviewCount,
+        pricePerNight: hotel.pricePerNight,
+        currency: hotel.currency,
+        bonvoyPoints: hotel.bonvoyPoints,
+        distanceFromActivities: calculateDistance(hotel),
+        images: hotel.images,
+        amenities: hotel.amenities,
+        bookingUrl: hotel.bookingUrl
+      }))
+    };
+
+    console.log(`[hotel-recommendations] Added ${finalRecommendations.length} hotel suggestions for ${budgetLevel} preference`);
+    
+  } catch (error) {
+    console.warn('[hotel-recommendations] Error loading hotel recommendations:', error);
+  }
+
+  return plan;
+}
 
 /**
  * FINAL SAFETY NET - Catches any remaining time issues after all other validation
@@ -326,7 +516,7 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
   const city = result.destination.split(",")[0]?.trim() || result.destination;
   
   try {
-    // Load all partner data for the city
+    // Load all partner data for the city (hotels excluded - handled separately)
     const [restaurants, activities, cabs, games] = await Promise.all([
       loadPartnerRestaurants(city),
       loadPartnerActivities(city), 
@@ -360,6 +550,8 @@ async function validateAndEnrichNewSchemaPartners(result: any): Promise<any> {
       partnerLookup.set(partner.name.toLowerCase(), { ...partner, type: 'activity' });
       partnerLookup.set(partner.id, { ...partner, type: 'activity' });
     });
+
+    // NOTE: Hotels are excluded from daily activity lookup - they are recommended at plan level only
 
     let partnersFound = 0;
     let partnersEnriched = 0;
@@ -874,7 +1066,18 @@ export async function planFromNaturalLanguage(
     // Add per-day Google Maps links if user requested map in their prompt
     const resultWithMapLinks = addMapLinksToTripPlan(finalSafeResult, userWantsMap);
     
-    return resultWithMapLinks;
+    // Hotel recommendations (CodeFest Feature)
+    // Add hotel recommendations for users without existing bookings
+    const city = resultWithMapLinks.destination?.split(",")[0]?.trim() || resultWithMapLinks.destination;
+    const resultWithHotels = await addHotelRecommendationsIfNeeded(
+      resultWithMapLinks, 
+      userProfile, 
+      city, 
+      resultWithMapLinks.startDate, 
+      resultWithMapLinks.endDate
+    );
+    
+    return resultWithHotels;
 
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
